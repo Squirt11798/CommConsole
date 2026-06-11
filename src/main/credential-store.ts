@@ -25,7 +25,19 @@ export interface SavedSession {
   createdAt: string
 }
 
-const storePath = (): string => join(app.getPath('userData'), 'sessions.json')
+const storePath   = (): string => join(app.getPath('userData'), 'sessions.json')
+const groupsPath  = (): string => join(app.getPath('userData'), 'groups.json')
+
+function loadGroups(): string[] {
+  try {
+    if (!existsSync(groupsPath())) return []
+    return JSON.parse(readFileSync(groupsPath(), 'utf-8'))
+  } catch { return [] }
+}
+
+function saveGroups(groups: string[]): void {
+  writeFileSync(groupsPath(), JSON.stringify(groups, null, 2), 'utf-8')
+}
 
 function load(): SavedSession[] {
   try {
@@ -97,6 +109,28 @@ export function registerCredentialHandlers(): void {
 
   ipcMain.handle('sessions:delete', (_e, id: string) => {
     save(load().filter(s => s.id !== id))
+  })
+
+  // ── Groups ────────────────────────────────────────────────────────────────
+  ipcMain.handle('groups:list', () => loadGroups())
+
+  ipcMain.handle('groups:create', (_e, name: string) => {
+    const groups = loadGroups()
+    if (!groups.includes(name)) { groups.push(name); saveGroups(groups) }
+  })
+
+  ipcMain.handle('groups:rename', (_e, oldName: string, newName: string) => {
+    // Rename in groups list
+    const groups = loadGroups().map(g => g === oldName ? newName : g)
+    saveGroups(groups)
+    // Rename on all sessions
+    const sessions = load().map(s => s.group === oldName ? { ...s, group: newName } : s)
+    save(sessions)
+  })
+
+  ipcMain.handle('groups:delete', (_e, name: string) => {
+    saveGroups(loadGroups().filter(g => g !== name))
+    save(load().filter(s => s.group !== name))
   })
 
   // Returns decrypted credentials — only called internally by ssh-manager via direct import

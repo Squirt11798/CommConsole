@@ -19,6 +19,13 @@ const api = {
     delete: (id: string) => ipcRenderer.invoke('sessions:delete', id)
   },
 
+  groups: {
+    list: (): Promise<string[]> => ipcRenderer.invoke('groups:list'),
+    create: (name: string) => ipcRenderer.invoke('groups:create', name),
+    rename: (oldName: string, newName: string) => ipcRenderer.invoke('groups:rename', oldName, newName),
+    delete: (name: string) => ipcRenderer.invoke('groups:delete', name)
+  },
+
   ssh: {
     connect: (opts: object): Promise<{ id: string }> => ipcRenderer.invoke('ssh:connect', opts),
     disconnect: (connId: string) => ipcRenderer.invoke('ssh:disconnect', connId),

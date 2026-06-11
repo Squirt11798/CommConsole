@@ -337,6 +337,14 @@ body { font-family: system-ui, sans-serif; font-size: 13px; color: var(--text); 
   display: flex; align-items: center; gap: 6px;
   padding: 5px 10px;
 }
+.group-input-confirm, .group-input-cancel {
+  background: none; border: none; cursor: pointer;
+  padding: 1px 4px; border-radius: 3px; font-size: 11px; flex-shrink: 0;
+}
+.group-input-confirm { color: var(--success); }
+.group-input-confirm:hover { background: var(--bg-3); }
+.group-input-cancel  { color: var(--danger); }
+.group-input-cancel:hover  { background: var(--bg-3); }
 .group-rename-input {
   background: var(--bg-0); border: 1px solid var(--accent);
   color: var(--text); padding: 1px 6px; border-radius: 3px;

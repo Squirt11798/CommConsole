@@ -28,6 +28,7 @@ export default function App() {
   const [tabs, setTabs] = useState<Tab[]>([])
   const [activeTab, setActiveTab] = useState<string | null>(null)
   const [sessions, setSessions] = useState<SavedSession[]>([])
+  const [groups, setGroups] = useState<string[]>([])
   const [showConnect, setShowConnect] = useState(false)
   const [connectPrefill, setConnectPrefill] = useState<SavedSession | null>(null)
   const [connectDefaultGroup, setConnectDefaultGroup] = useState<string | undefined>()
@@ -36,8 +37,12 @@ export default function App() {
   const [showMonitor, setShowMonitor] = useState(true)
 
   const loadSessions = useCallback(async () => {
-    const list = await window.api.sessions.list()
+    const [list, grps] = await Promise.all([
+      window.api.sessions.list(),
+      window.api.groups.list()
+    ])
     setSessions(list as SavedSession[])
+    setGroups(grps)
   }, [])
 
   useEffect(() => {
@@ -74,17 +79,20 @@ export default function App() {
     }
   }, [])
 
-  const renameGroup = useCallback(async (oldName: string, newName: string) => {
-    const toUpdate = sessions.filter(s => (s.group || 'Ungrouped') === oldName)
-    await Promise.all(toUpdate.map(s => window.api.sessions.save({ ...s, group: newName })))
+  const createGroup = useCallback(async (name: string) => {
+    await window.api.groups.create(name)
     loadSessions()
-  }, [sessions, loadSessions])
+  }, [loadSessions])
+
+  const renameGroup = useCallback(async (oldName: string, newName: string) => {
+    await window.api.groups.rename(oldName, newName)
+    loadSessions()
+  }, [loadSessions])
 
   const deleteGroup = useCallback(async (name: string) => {
-    const toDelete = sessions.filter(s => (s.group || 'Ungrouped') === name)
-    await Promise.all(toDelete.map(s => window.api.sessions.delete(s.id)))
+    await window.api.groups.delete(name)
     loadSessions()
-  }, [sessions, loadSessions])
+  }, [loadSessions])
 
   const closeTab = useCallback(async (connId: string) => {
     await window.api.ssh.disconnect(connId)
@@ -119,11 +127,13 @@ export default function App() {
         {/* Session sidebar */}
         <SessionSidebar
           sessions={sessions}
+          groups={groups}
           collapsed={sidebarCollapsed}
           onToggleCollapse={() => setSidebarCollapsed(v => !v)}
           onNewConnection={(group) => { setConnectPrefill(null); setConnectDefaultGroup(group); setShowConnect(true) }}
           onOpenSession={(s) => { setConnectPrefill(s); setConnectDefaultGroup(undefined); setShowConnect(true) }}
           onDeleteSession={async (id) => { await window.api.sessions.delete(id); loadSessions() }}
+          onCreateGroup={createGroup}
           onRenameGroup={renameGroup}
           onDeleteGroup={deleteGroup}
         />
