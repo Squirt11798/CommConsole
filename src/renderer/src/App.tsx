@@ -79,6 +79,13 @@ export default function App() {
     }
   }, [])
 
+  const moveSession = useCallback(async (sessionId: string, groupName: string) => {
+    const session = sessions.find(s => s.id === sessionId)
+    if (!session) return
+    await window.api.sessions.save({ ...session, group: groupName === 'Ungrouped' ? '' : groupName })
+    loadSessions()
+  }, [sessions, loadSessions])
+
   const createGroup = useCallback(async (name: string) => {
     await window.api.groups.create(name)
     loadSessions()
@@ -133,6 +140,7 @@ export default function App() {
           onNewConnection={(group) => { setConnectPrefill(null); setConnectDefaultGroup(group); setShowConnect(true) }}
           onOpenSession={(s) => { setConnectPrefill(s); setConnectDefaultGroup(undefined); setShowConnect(true) }}
           onDeleteSession={async (id) => { await window.api.sessions.delete(id); loadSessions() }}
+          onMoveSession={moveSession}
           onCreateGroup={createGroup}
           onRenameGroup={renameGroup}
           onDeleteGroup={deleteGroup}

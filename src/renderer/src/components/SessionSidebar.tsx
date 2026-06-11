@@ -9,6 +9,7 @@ interface Props {
   onNewConnection: (defaultGroup?: string) => void
   onOpenSession: (s: SavedSession) => void
   onDeleteSession: (id: string) => void
+  onMoveSession: (sessionId: string, groupName: string) => void
   onCreateGroup: (name: string) => void
   onRenameGroup: (oldName: string, newName: string) => void
   onDeleteGroup: (name: string) => void
@@ -28,7 +29,7 @@ interface ContextMenu {
 export default function SessionSidebar({
   sessions, groups, collapsed, onToggleCollapse,
   onNewConnection, onOpenSession, onDeleteSession,
-  onCreateGroup, onRenameGroup, onDeleteGroup
+  onMoveSession, onCreateGroup, onRenameGroup, onDeleteGroup
 }: Props) {
   const [filter, setFilter] = useState('')
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null)
@@ -38,6 +39,8 @@ export default function SessionSidebar({
   const [creatingGroup, setCreatingGroup] = useState(false)
   const [newGroupValue, setNewGroupValue] = useState('')
   const newGroupInputRef = useRef<HTMLInputElement>(null)
+  const [dragSessionId, setDragSessionId] = useState<string | null>(null)
+  const [dropTarget, setDropTarget] = useState<string | null>(null)
 
   const openCtx = useCallback((e: React.MouseEvent, target: ContextTarget) => {
     e.preventDefault()
@@ -135,8 +138,18 @@ export default function SessionSidebar({
               {allGroupNames.map(group => (
                 <div key={group} className="session-group">
                   <div
-                    className="session-group-label"
+                    className={`session-group-label ${dropTarget === group ? 'drop-active' : ''}`}
                     onContextMenu={e => openCtx(e, { type: 'group', name: group })}
+                    onDragOver={e => { e.preventDefault(); setDropTarget(group) }}
+                    onDragEnter={e => { e.preventDefault(); setDropTarget(group) }}
+                    onDragLeave={() => setDropTarget(null)}
+                    onDrop={e => {
+                      e.preventDefault()
+                      const id = e.dataTransfer.getData('sessionId')
+                      if (id) onMoveSession(id, group)
+                      setDropTarget(null)
+                      setDragSessionId(null)
+                    }}
                   >
                     {renamingGroup === group ? (
                       <input
@@ -159,7 +172,14 @@ export default function SessionSidebar({
                   {(sessionsByGroup[group] ?? []).map(s => (
                     <div
                       key={s.id}
-                      className="session-item"
+                      className={`session-item ${dragSessionId === s.id ? 'dragging' : ''}`}
+                      draggable
+                      onDragStart={e => {
+                        e.dataTransfer.setData('sessionId', s.id)
+                        e.dataTransfer.effectAllowed = 'move'
+                        setDragSessionId(s.id)
+                      }}
+                      onDragEnd={() => { setDragSessionId(null); setDropTarget(null) }}
                       onClick={() => onOpenSession(s)}
                       onContextMenu={e => openCtx(e, { type: 'session', session: s })}
                       title={`${s.username}@${s.host}:${s.port}`}
