@@ -19,6 +19,7 @@ export default function Terminal({ connId, active }: Props) {
 
     const term = new XTerm({
       cursorBlink: true,
+      copyOnSelect: true,
       fontFamily: '"Cascadia Code", "Fira Code", "Consolas", monospace',
       fontSize: 14,
       lineHeight: 1.2,
@@ -71,12 +72,21 @@ export default function Terminal({ connId, active }: Props) {
       if (id === connId) term.write(data)
     })
 
+    // Right-click pastes clipboard content into the terminal
+    const handleContextMenu = async (e: MouseEvent) => {
+      e.preventDefault()
+      const text = await navigator.clipboard.readText().catch(() => '')
+      if (text) window.api.ssh.sendData(connId, text)
+    }
+    containerRef.current.addEventListener('contextmenu', handleContextMenu)
+
     const ro = new ResizeObserver(() => fitAddon.fit())
     ro.observe(containerRef.current)
 
     return () => {
       unsub()
       ro.disconnect()
+      containerRef.current?.removeEventListener('contextmenu', handleContextMenu)
       term.dispose()
     }
   }, [connId])
