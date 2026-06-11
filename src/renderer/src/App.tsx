@@ -30,6 +30,7 @@ export default function App() {
   const [sessions, setSessions] = useState<SavedSession[]>([])
   const [showConnect, setShowConnect] = useState(false)
   const [connectPrefill, setConnectPrefill] = useState<SavedSession | null>(null)
+  const [connectDefaultGroup, setConnectDefaultGroup] = useState<string | undefined>()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [rightPanel, setRightPanel] = useState<RightPanel>('none')
   const [showMonitor, setShowMonitor] = useState(true)
@@ -73,6 +74,18 @@ export default function App() {
     }
   }, [])
 
+  const renameGroup = useCallback(async (oldName: string, newName: string) => {
+    const toUpdate = sessions.filter(s => (s.group || 'Ungrouped') === oldName)
+    await Promise.all(toUpdate.map(s => window.api.sessions.save({ ...s, group: newName })))
+    loadSessions()
+  }, [sessions, loadSessions])
+
+  const deleteGroup = useCallback(async (name: string) => {
+    const toDelete = sessions.filter(s => (s.group || 'Ungrouped') === name)
+    await Promise.all(toDelete.map(s => window.api.sessions.delete(s.id)))
+    loadSessions()
+  }, [sessions, loadSessions])
+
   const closeTab = useCallback(async (connId: string) => {
     await window.api.ssh.disconnect(connId)
     setTabs(prev => {
@@ -108,9 +121,11 @@ export default function App() {
           sessions={sessions}
           collapsed={sidebarCollapsed}
           onToggleCollapse={() => setSidebarCollapsed(v => !v)}
-          onNewConnection={() => { setConnectPrefill(null); setShowConnect(true) }}
-          onOpenSession={(s) => { setConnectPrefill(s); setShowConnect(true) }}
+          onNewConnection={(group) => { setConnectPrefill(null); setConnectDefaultGroup(group); setShowConnect(true) }}
+          onOpenSession={(s) => { setConnectPrefill(s); setConnectDefaultGroup(undefined); setShowConnect(true) }}
           onDeleteSession={async (id) => { await window.api.sessions.delete(id); loadSessions() }}
+          onRenameGroup={renameGroup}
+          onDeleteGroup={deleteGroup}
         />
 
         {/* Main area */}
@@ -131,7 +146,7 @@ export default function App() {
                   >✕</button>
                 </div>
               ))}
-              <button className="tab-new" onClick={() => { setConnectPrefill(null); setShowConnect(true) }}>+</button>
+              <button className="tab-new" onClick={() => { setConnectPrefill(null); setConnectDefaultGroup(undefined); setShowConnect(true) }}>+</button>
 
               {/* Right-side toolbar icons */}
               <div className="tab-toolbar">
@@ -171,7 +186,7 @@ export default function App() {
                 <div className="empty-logo">⚡</div>
                 <h2>VaultTerm</h2>
                 <p>No active connections</p>
-                <button className="btn-primary" onClick={() => { setConnectPrefill(null); setShowConnect(true) }}>
+                <button className="btn-primary" onClick={() => { setConnectPrefill(null); setConnectDefaultGroup(undefined); setShowConnect(true) }}>
                   New Connection
                 </button>
               </div>
@@ -188,6 +203,7 @@ export default function App() {
       {showConnect && (
         <ConnectModal
           prefill={connectPrefill}
+          defaultGroup={connectDefaultGroup}
           onConnect={openConnection}
           onSave={async (session) => { await window.api.sessions.save(session); loadSessions() }}
           onClose={() => setShowConnect(false)}

@@ -325,6 +325,19 @@ body { font-family: system-ui, sans-serif; font-size: 13px; color: var(--text); 
 }
 .context-menu button:hover { background: var(--bg-3); }
 .context-menu button.danger { color: var(--danger); }
+.context-menu-header {
+  padding: 4px 14px 6px;
+  font-size: 10px; color: var(--text-dim);
+  text-transform: uppercase; letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border); margin-bottom: 2px;
+}
+.context-divider { height: 1px; background: var(--border); margin: 3px 0; }
+.group-count { color: var(--text-dim); font-size: 10px; }
+.group-rename-input {
+  background: var(--bg-0); border: 1px solid var(--accent);
+  color: var(--text); padding: 1px 6px; border-radius: 3px;
+  font-size: 11px; width: 100%; outline: none;
+}
 
 /* ── Content area ── */
 .content-area { flex: 1; display: flex; overflow: hidden; }

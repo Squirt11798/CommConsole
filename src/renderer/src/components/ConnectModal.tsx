@@ -15,12 +15,13 @@ interface ConnectOpts {
 
 interface Props {
   prefill: SavedSession | null
+  defaultGroup?: string
   onConnect: (opts: ConnectOpts) => void
   onSave: (session: object) => Promise<void>
   onClose: () => void
 }
 
-export default function ConnectModal({ prefill, onConnect, onSave, onClose }: Props) {
+export default function ConnectModal({ prefill, defaultGroup, onConnect, onSave, onClose }: Props) {
   const [name, setName] = useState(prefill?.name ?? '')
   const [host, setHost] = useState(prefill?.host ?? '')
   const [port, setPort] = useState(String(prefill?.port ?? 22))
@@ -29,7 +30,7 @@ export default function ConnectModal({ prefill, onConnect, onSave, onClose }: Pr
   const [password, setPassword] = useState('')
   const [keyPath, setKeyPath] = useState('')
   const [passphrase, setPassphrase] = useState('')
-  const [group, setGroup] = useState(prefill?.group ?? '')
+  const [group, setGroup] = useState(prefill?.group ?? defaultGroup ?? '')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
