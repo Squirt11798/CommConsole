@@ -114,6 +114,11 @@ export default function SessionSidebar({
       >
         <div className="sidebar-header">
           {!collapsed && <span className="sidebar-title">Sessions</span>}
+          {!collapsed && (
+            <button className="sidebar-import-btn" onClick={onImportMoba} title="Import from MobaXterm">
+              📥
+            </button>
+          )}
           <button className="sidebar-toggle" onClick={onToggleCollapse} title={collapsed ? 'Expand' : 'Collapse'}>
             {collapsed ? '»' : '«'}
           </button>

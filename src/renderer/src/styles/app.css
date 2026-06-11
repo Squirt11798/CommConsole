@@ -73,6 +73,12 @@ body { font-family: system-ui, sans-serif; font-size: 13px; color: var(--text); 
   font-size: 14px;
 }
 .sidebar-toggle:hover { background: var(--bg-3); color: var(--text); }
+.sidebar-import-btn {
+  margin-left: auto; background: none; border: none;
+  color: var(--text-dim); cursor: pointer; padding: 2px 5px;
+  border-radius: 3px; font-size: 13px; line-height: 1;
+}
+.sidebar-import-btn:hover { background: var(--bg-3); color: var(--text); }
 
 .btn-new-connection {
   margin: 8px;
