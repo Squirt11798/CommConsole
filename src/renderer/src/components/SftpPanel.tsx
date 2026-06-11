@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 
 interface FileEntry {
   name: string
@@ -32,6 +32,9 @@ export default function SftpPanel({ connId }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [renaming, setRenaming] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
+  const [creatingFolder, setCreatingFolder] = useState(false)
+  const [newFolderName, setNewFolderName] = useState('')
+  const newFolderInputRef = useRef<HTMLInputElement>(null)
 
   const navigate = useCallback(async (path: string) => {
     setLoading(true)
@@ -102,8 +105,16 @@ export default function SftpPanel({ connId }: Props) {
     navigate(cwd)
   }
 
-  const mkdir = async () => {
-    const name = prompt('New folder name:')
+  const startMkdir = () => {
+    setCreatingFolder(true)
+    setNewFolderName('')
+    setTimeout(() => newFolderInputRef.current?.focus(), 20)
+  }
+
+  const commitMkdir = async () => {
+    const name = newFolderName.trim()
+    setCreatingFolder(false)
+    setNewFolderName('')
     if (!name) return
     try {
       await window.api.sftp.mkdir(connId, cwd.replace(/\/$/, '') + '/' + name)
@@ -147,8 +158,25 @@ export default function SftpPanel({ connId }: Props) {
         <span className="sftp-cwd" title={cwd}>{cwd}</span>
         <button onClick={() => navigate(cwd)} title="Refresh">⟳</button>
         <button onClick={upload} title="Upload">⬆</button>
-        <button onClick={mkdir} title="New folder">📁+</button>
+        <button onClick={startMkdir} title="New folder">📁+</button>
       </div>
+
+      {creatingFolder && (
+        <div className="sftp-mkdir-row">
+          <input
+            ref={newFolderInputRef}
+            value={newFolderName}
+            onChange={e => setNewFolderName(e.target.value)}
+            placeholder="Folder name"
+            onKeyDown={e => {
+              if (e.key === 'Enter') commitMkdir()
+              if (e.key === 'Escape') { setCreatingFolder(false); setNewFolderName('') }
+            }}
+          />
+          <button onMouseDown={e => { e.preventDefault(); commitMkdir() }} title="Create">✓</button>
+          <button onMouseDown={e => { e.preventDefault(); setCreatingFolder(false); setNewFolderName('') }} title="Cancel">✕</button>
+        </div>
+      )}
 
       {error && <div className="sftp-error">{error}</div>}
 

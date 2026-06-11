@@ -201,6 +201,22 @@ body { font-family: system-ui, sans-serif; font-size: 13px; color: var(--text); 
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-family: monospace; font-size: 11px;
 }
+.sftp-mkdir-row {
+  display: flex; align-items: center; gap: 4px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-2);
+}
+.sftp-mkdir-row input {
+  flex: 1; background: var(--bg-3); border: 1px solid var(--accent);
+  color: var(--text); padding: 2px 6px; border-radius: 3px; font-size: 12px;
+  outline: none;
+}
+.sftp-mkdir-row button {
+  background: var(--bg-3); border: none; color: var(--text);
+  padding: 2px 7px; border-radius: 3px; cursor: pointer; font-size: 12px;
+}
+.sftp-mkdir-row button:hover { background: var(--accent-dim); }
 .sftp-error { padding: 6px 10px; background: #3a1a1a; color: var(--danger); font-size: 11px; }
 .sftp-loading { padding: 16px; color: var(--text-dim); text-align: center; }
 .sftp-list { flex: 1; overflow-y: auto; }

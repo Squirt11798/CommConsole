@@ -15,41 +15,6 @@ interface Props {
   connId: string
 }
 
-// Single bash command — outputs KEY:VALUE lines.
-// Built as a plain string to avoid template-literal conflicts with bash ${VAR:-default} syntax.
-const STATS_CMD = [
-  'bash -c \'',
-  'C1=$(cat /proc/stat | head -1 | tr -s " ");',
-  'NR1=$(cat /proc/net/dev 2>/dev/null | awk "NR>2{rx+=$2;tx+=$10} END{print rx,tx}");',
-  'sleep 1;',
-  'C2=$(cat /proc/stat | head -1 | tr -s " ");',
-  'NR2=$(cat /proc/net/dev 2>/dev/null | awk "NR>2{rx+=$2;tx+=$10} END{print rx,tx}");',
-  'I1=$(echo $C1 | cut -d" " -f5);',
-  'I2=$(echo $C2 | cut -d" " -f5);',
-  'T1=$(echo $C1 | awk "{s=0;for(i=2;i<=8;i++)s+=\\$i;print s}");',
-  'T2=$(echo $C2 | awk "{s=0;for(i=2;i<=8;i++)s+=\\$i;print s}");',
-  'DT=$((T2-T1)); DI=$((I2-I1));',
-  '[ $DT -gt 0 ] && CPU=$(awk "BEGIN{printf \\"%.0f\\",(1-$DI/$DT)*100}") || CPU=0;',
-  'MT=$(grep MemTotal /proc/meminfo | awk "{print \\$2}");',
-  'MA=$(grep MemAvailable /proc/meminfo | awk "{print \\$2}");',
-  'MU=$((MT-MA));',
-  'RX1=$(echo $NR1 | cut -d" " -f1); TX1=$(echo $NR1 | cut -d" " -f2);',
-  'RX2=$(echo $NR2 | cut -d" " -f1); TX2=$(echo $NR2 | cut -d" " -f2);',
-  'RXS=$(( (${RX2:-0} - ${RX1:-0}) / 128 ));',
-  'TXS=$(( (${TX2:-0} - ${TX1:-0}) / 128 ));',
-  'DISK=$(df -Ph / 2>/dev/null | awk "NR==2{print \\$5}" | tr -d "%");',
-  'USERS=$(who 2>/dev/null | wc -l | tr -d " ");',
-  'UP=$(uptime -p 2>/dev/null | sed "s/up //" || uptime | sed "s/.*up //;s/ load.*//" | xargs);',
-  'echo "CPU:$CPU";',
-  'echo "MEMTOTAL:$((MT/1024))";',
-  'echo "MEMUSED:$((MU/1024))";',
-  'echo "DISK:${DISK:-0}";',
-  'echo "USERS:${USERS:-0}";',
-  'echo "UP:$UP";',
-  'echo "RX:${RXS:-0}";',
-  'echo "TX:${TXS:-0}";',
-  '\''
-].join(' ')
 
 function parseStats(raw: string): Partial<Stats> {
   const out: Partial<Stats> = {}
@@ -98,7 +63,7 @@ export default function ResourceMonitor({ connId }: Props) {
 
     async function poll() {
       try {
-        const raw = await window.api.ssh.exec(connId, STATS_CMD)
+        const raw = await window.api.ssh.getStats(connId)
         if (!cancelled) {
           setStats(parseStats(raw))
           setError(false)
