@@ -1,8 +1,9 @@
-import { ipcMain, BrowserWindow } from 'electron'
+import { ipcMain, BrowserWindow, dialog } from 'electron'
 import { Client, SFTPWrapper } from 'ssh2'
 import { readFileSync } from 'fs'
 import { randomUUID } from 'crypto'
 import { getDecryptedCredentials } from './credential-store'
+import { computeFingerprint, checkHost, trustHost } from './known-hosts'
 
 interface Connection {
   id: string
@@ -24,13 +25,31 @@ export function registerSshHandlers(win: BrowserWindow): void {
     host?: string            // or connect ad-hoc
     port?: number
     username?: string
+    authType?: string
     password?: string
     privateKeyPath?: string
     passphrase?: string
   }) => {
-    let host: string
-    let port: number
-    let username: string
+    // ── Input validation ────────────────────────────────────────────────────
+    const rawHost = typeof opts.host === 'string' ? opts.host.trim() : ''
+    if (!rawHost) throw new Error('Host is required')
+
+    const rawPort = parseInt(String(opts.port ?? 22), 10)
+    if (isNaN(rawPort) || rawPort < 1 || rawPort > 65535) {
+      throw new Error('Port must be between 1 and 65535')
+    }
+
+    const rawUsername = typeof opts.username === 'string' ? opts.username.trim() : ''
+    if (!rawUsername) throw new Error('Username is required')
+
+    if (opts.authType && opts.authType !== 'password' && opts.authType !== 'key') {
+      throw new Error('authType must be "password" or "key"')
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
+    let host = rawHost
+    let port = rawPort
+    let username = rawUsername
     let password: string | undefined
     let privateKey: Buffer | undefined
     let passphrase: string | undefined
@@ -39,18 +58,10 @@ export function registerSshHandlers(win: BrowserWindow): void {
       // Load from vault
       const creds = getDecryptedCredentials(opts.sessionId)
       if (!creds) throw new Error('Session not found')
-      // We need the non-secret fields too — caller must supply host/port/username
-      // (they come from the session list which strips secrets)
-      host = opts.host!
-      port = opts.port ?? 22
-      username = opts.username!
       password = creds.password || undefined
       privateKey = creds.privateKey ? Buffer.from(creds.privateKey) : undefined
       passphrase = creds.passphrase || undefined
     } else {
-      host = opts.host!
-      port = opts.port ?? 22
-      username = opts.username!
       password = opts.password
       if (opts.privateKeyPath) {
         privateKey = readFileSync(opts.privateKeyPath)
@@ -82,7 +93,6 @@ export function registerSshHandlers(win: BrowserWindow): void {
             send(win, 'ssh:closed', connId)
           })
 
-          // Store stream on connection for writes/resize
           ;(connections.get(connId) as Connection & { stream: typeof stream }).stream = stream
 
           resolve({ id: connId })
@@ -99,7 +109,57 @@ export function registerSshHandlers(win: BrowserWindow): void {
         port,
         username,
         readyTimeout: 20000,
-        keepaliveInterval: 10000
+        keepaliveInterval: 10000,
+
+        // ── TOFU host key verification ──────────────────────────────────────
+        hostVerifier: (key: Buffer, callback: (result: boolean) => void) => {
+          const fp = computeFingerprint(key)
+          const check = checkHost(host, port, fp)
+
+          if (check.status === 'ok') {
+            callback(true)
+            return
+          }
+
+          if (check.status === 'new') {
+            dialog.showMessageBox(win, {
+              type: 'question',
+              title: 'Unknown Host — Verify Fingerprint',
+              message: `Connect to ${host}:${port}?`,
+              detail: `This host has not been seen before.\n\nSHA-256 fingerprint:\n${fp}\n\nVerify this fingerprint out-of-band (e.g. via the server console) before trusting it.`,
+              buttons: ['Trust & Connect', 'Cancel'],
+              defaultId: 0,
+              cancelId: 1
+            }).then(({ response }) => {
+              if (response === 0) {
+                trustHost(host, port, fp)
+                callback(true)
+              } else {
+                callback(false)
+              }
+            })
+            return
+          }
+
+          // status === 'changed' — potential MITM
+          dialog.showMessageBox(win, {
+            type: 'warning',
+            title: 'Host Key Changed — Possible MITM Attack',
+            message: `WARNING: The host key for ${host}:${port} has changed!`,
+            detail: `Stored fingerprint:\n${check.stored}\n\nPresented fingerprint:\n${check.fingerprint}\n\nThis could indicate a man-in-the-middle attack. Do NOT connect unless you know why the host key changed (e.g. the server was rebuilt).`,
+            buttons: ['Cancel', 'Connect Anyway (update stored key)'],
+            defaultId: 0,
+            cancelId: 0
+          }).then(({ response }) => {
+            if (response === 1) {
+              trustHost(host, port, check.fingerprint)
+              callback(true)
+            } else {
+              callback(false)
+            }
+          })
+        }
+        // ────────────────────────────────────────────────────────────────────
       }
 
       if (privateKey) {

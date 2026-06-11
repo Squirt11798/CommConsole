@@ -19,13 +19,32 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+      navigateOnDragDrop: false
     }
   })
 
+  // Only open http/https links externally — block any other protocol (e.g. file://, javascript:)
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url)
+    try {
+      const parsed = new URL(url)
+      if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+        shell.openExternal(url)
+      }
+    } catch { /* invalid URL — ignore */ }
     return { action: 'deny' }
+  })
+
+  // Prevent the renderer from navigating away from the local page
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const appUrl = is.dev
+      ? process.env['ELECTRON_RENDERER_URL'] ?? ''
+      : `file://${join(__dirname, '../renderer/index.html')}`
+    if (!url.startsWith(appUrl)) {
+      event.preventDefault()
+    }
   })
 
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {

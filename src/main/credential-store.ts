@@ -82,16 +82,31 @@ export function registerCredentialHandlers(): void {
     passphrase?: string
     group?: string
   }) => {
+    // Validate fields before persisting
+    if (typeof session.host !== 'string' || !session.host.trim()) {
+      throw new Error('Host is required')
+    }
+    const port = parseInt(String(session.port), 10)
+    if (isNaN(port) || port < 1 || port > 65535) {
+      throw new Error('Port must be between 1 and 65535')
+    }
+    if (typeof session.username !== 'string' || !session.username.trim()) {
+      throw new Error('Username is required')
+    }
+    if (session.authType !== 'password' && session.authType !== 'key') {
+      throw new Error('authType must be "password" or "key"')
+    }
+
     const sessions = load()
     const id = session.id || randomUUID()
     const idx = sessions.findIndex(s => s.id === id)
 
     const record: SavedSession = {
       id,
-      name: session.name,
-      host: session.host,
-      port: session.port,
-      username: session.username,
+      name: String(session.name || '').trim() || `${session.username}@${session.host}`,
+      host: session.host.trim(),
+      port,
+      username: session.username.trim(),
       authType: session.authType,
       encryptedPassword: session.password ? encrypt(session.password) : (sessions[idx]?.encryptedPassword ?? ''),
       encryptedPrivateKey: session.privateKey ? encrypt(session.privateKey) : (sessions[idx]?.encryptedPrivateKey ?? ''),
