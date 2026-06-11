@@ -222,8 +222,13 @@ export default function App() {
         <ConnectModal
           prefill={connectPrefill}
           defaultGroup={connectDefaultGroup}
+          groups={groups}
           onConnect={openConnection}
-          onSave={async (session) => { await window.api.sessions.save(session); loadSessions() }}
+          onSave={async (session) => {
+            const id = await window.api.sessions.save(session)
+            loadSessions()
+            return id
+          }}
           onClose={() => setShowConnect(false)}
         />
       )}

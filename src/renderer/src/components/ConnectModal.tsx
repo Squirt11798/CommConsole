@@ -16,12 +16,13 @@ interface ConnectOpts {
 interface Props {
   prefill: SavedSession | null
   defaultGroup?: string
+  groups: string[]
   onConnect: (opts: ConnectOpts) => void
-  onSave: (session: object) => Promise<void>
+  onSave: (session: object) => Promise<string>
   onClose: () => void
 }
 
-export default function ConnectModal({ prefill, defaultGroup, onConnect, onSave, onClose }: Props) {
+export default function ConnectModal({ prefill, defaultGroup, groups, onConnect, onSave, onClose }: Props) {
   const [name, setName] = useState(prefill?.name ?? '')
   const [host, setHost] = useState(prefill?.host ?? '')
   const [port, setPort] = useState(String(prefill?.port ?? 22))
@@ -31,7 +32,7 @@ export default function ConnectModal({ prefill, defaultGroup, onConnect, onSave,
   const [keyPath, setKeyPath] = useState('')
   const [passphrase, setPassphrase] = useState('')
   const [group, setGroup] = useState(prefill?.group ?? defaultGroup ?? '')
-  const [saving, setSaving] = useState(false)
+  const [connecting, setConnecting] = useState(false)
 
   useEffect(() => {
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -44,38 +45,37 @@ export default function ConnectModal({ prefill, defaultGroup, onConnect, onSave,
     if (p) setKeyPath(p)
   }
 
-  const handleConnect = () => {
-    if (!host || !username) return
-    onConnect({
-      sessionId: prefill?.id,
-      host,
-      port: parseInt(port) || 22,
-      username,
-      authType,
-      password: authType === 'password' ? password : undefined,
-      privateKeyPath: authType === 'key' ? keyPath : undefined,
-      passphrase: authType === 'key' ? passphrase : undefined,
-      label: name || `${username}@${host}`
-    })
-  }
+  const buildSessionObj = (savedId?: string) => ({
+    id: savedId ?? prefill?.id,
+    name: name || `${username}@${host}`,
+    host,
+    port: parseInt(port) || 22,
+    username,
+    authType,
+    password: authType === 'password' ? password : undefined,
+    group
+  })
 
-  const handleSave = async () => {
-    if (!host || !username) return
-    setSaving(true)
+  // Connect auto-saves so the session always appears in the sidebar
+  const handleConnect = async () => {
+    if (!host || !username || connecting) return
+    setConnecting(true)
     try {
-      await onSave({
-        id: prefill?.id,
-        name: name || `${username}@${host}`,
+      const savedId = await onSave(buildSessionObj())
+      onConnect({
+        sessionId: savedId ?? prefill?.id,
         host,
         port: parseInt(port) || 22,
         username,
         authType,
         password: authType === 'password' ? password : undefined,
-        privateKey: authType === 'key' && keyPath ? undefined : undefined, // key content loaded at connect time
-        group
+        privateKeyPath: authType === 'key' ? keyPath : undefined,
+        passphrase: authType === 'key' ? passphrase : undefined,
+        label: name || `${username}@${host}`
       })
-    } finally {
-      setSaving(false)
+    } catch (err) {
+      setConnecting(false)
+      throw err
     }
   }
 
@@ -90,22 +90,34 @@ export default function ConnectModal({ prefill, defaultGroup, onConnect, onSave,
         <div className="modal-body">
           <div className="form-row">
             <label>Session Name</label>
-            <input value={name} onChange={e => setName(e.target.value)} placeholder="My Server" />
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="My Server" autoFocus={!prefill} />
           </div>
+
           <div className="form-row">
             <label>Group</label>
-            <input value={group} onChange={e => setGroup(e.target.value)} placeholder="Production" />
+            <select
+              className="form-select"
+              value={group}
+              onChange={e => setGroup(e.target.value)}
+            >
+              <option value="">Ungrouped</option>
+              {groups.map(g => (
+                <option key={g} value={g}>{g}</option>
+              ))}
+            </select>
           </div>
+
           <div className="form-row two-col">
             <div>
               <label>Host / IP</label>
-              <input value={host} onChange={e => setHost(e.target.value)} placeholder="192.168.1.1" autoFocus={!prefill} />
+              <input value={host} onChange={e => setHost(e.target.value)} placeholder="192.168.1.1" autoFocus={!!prefill} />
             </div>
             <div>
               <label>Port</label>
               <input value={port} onChange={e => setPort(e.target.value)} placeholder="22" style={{ width: 70 }} />
             </div>
           </div>
+
           <div className="form-row">
             <label>Username</label>
             <input value={username} onChange={e => setUsername(e.target.value)} placeholder="root" />
@@ -161,11 +173,12 @@ export default function ConnectModal({ prefill, defaultGroup, onConnect, onSave,
         </div>
 
         <div className="modal-footer">
-          <button className="btn-secondary" onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving…' : 'Save Session'}
-          </button>
-          <button className="btn-primary" onClick={handleConnect} disabled={!host || !username}>
-            Connect
+          <button
+            className="btn-primary"
+            onClick={handleConnect}
+            disabled={!host || !username || connecting}
+          >
+            {connecting ? 'Connecting…' : 'Connect'}
           </button>
         </div>
       </div>

@@ -302,6 +302,19 @@ body { font-family: system-ui, sans-serif; font-size: 13px; color: var(--text); 
   width: 100%;
 }
 .form-row input:focus { border-color: var(--accent-dim); }
+.form-select {
+  padding: 7px 10px;
+  background: var(--bg-0); border: 1px solid var(--border);
+  border-radius: 4px; color: var(--text); font-size: 13px; outline: none;
+  width: 100%; cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237878a0' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 30px;
+}
+.form-select:focus { border-color: var(--accent-dim); }
+.form-select option { background: var(--bg-2); color: var(--text); }
 .form-row.two-col { flex-direction: row; gap: 10px; }
 .form-row.two-col > div { display: flex; flex-direction: column; gap: 4px; flex: 1; }
 .radio-group { display: flex; gap: 16px; padding: 4px 0; }
