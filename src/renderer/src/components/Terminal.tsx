@@ -19,7 +19,6 @@ export default function Terminal({ connId, active }: Props) {
 
     const term = new XTerm({
       cursorBlink: true,
-      copyOnSelect: true,
       fontFamily: '"Cascadia Code", "Fira Code", "Consolas", monospace',
       fontSize: 14,
       lineHeight: 1.2,
@@ -56,6 +55,12 @@ export default function Terminal({ connId, active }: Props) {
 
     termRef.current = term
     fitAddonRef.current = fitAddon
+
+    // Copy selection to system clipboard on mouse-up
+    term.onSelectionChange(() => {
+      const sel = term.getSelection()
+      if (sel) navigator.clipboard.writeText(sel).catch(() => {})
+    })
 
     // Send keystrokes to SSH
     term.onData(data => {
