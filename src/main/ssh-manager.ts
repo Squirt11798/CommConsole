@@ -1,6 +1,6 @@
 import { ipcMain, BrowserWindow, dialog } from 'electron'
 import { Client, SFTPWrapper } from 'ssh2'
-import { readFileSync } from 'fs'
+import { readFileSync, existsSync } from 'fs'
 import { randomUUID } from 'crypto'
 import { getDecryptedCredentials } from './credential-store'
 import { computeFingerprint, checkHost, trustHost } from './known-hosts'
@@ -64,7 +64,22 @@ export function registerSshHandlers(win: BrowserWindow): void {
     } else {
       password = opts.password
       if (opts.privateKeyPath) {
+        if (!existsSync(opts.privateKeyPath)) {
+          throw new Error(
+            `Key file not found:\n${opts.privateKeyPath}\n\nBrowse to the correct key file in the session editor.`
+          )
+        }
         privateKey = readFileSync(opts.privateKeyPath)
+        // PPK v3 (PuTTY 0.75+) is not supported by ssh2 — must be converted first
+        if (privateKey.slice(0, 30).toString('utf-8').startsWith('PuTTY-User-Key-File-3:')) {
+          throw new Error(
+            'PuTTY PPK v3 format is not supported.\n\n' +
+            'Convert the key to OpenSSH format using PuTTYgen:\n' +
+            '  1. Open PuTTYgen and load the key\n' +
+            '  2. Conversions → Export OpenSSH key\n' +
+            '  3. Save the file, then browse to it in VaultTerm'
+          )
+        }
       }
       passphrase = opts.passphrase
     }
@@ -101,7 +116,21 @@ export function registerSshHandlers(win: BrowserWindow): void {
 
       client.on('error', (err) => {
         connections.delete(connId)
-        reject(err)
+        if (err.message?.includes('All configured authentication methods failed')) {
+          if (privateKey) {
+            reject(new Error(
+              'Authentication failed — the server rejected the key.\n\n' +
+              'Possible causes:\n' +
+              '• The public key is not in ~/.ssh/authorized_keys on the server\n' +
+              '• The key requires a passphrase but none was entered\n' +
+              '• PPK v2 key not accepted (try converting to OpenSSH format)'
+            ))
+          } else {
+            reject(new Error('Authentication failed — incorrect username or password.'))
+          }
+        } else {
+          reject(err)
+        }
       })
 
       const connectConfig: Parameters<Client['connect']>[0] = {
