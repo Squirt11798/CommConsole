@@ -33,6 +33,9 @@ export default function SessionSidebar({
   const [renamingGroup, setRenamingGroup] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const renameInputRef = useRef<HTMLInputElement>(null)
+  const [creatingGroup, setCreatingGroup] = useState(false)
+  const [newGroupValue, setNewGroupValue] = useState('')
+  const newGroupInputRef = useRef<HTMLInputElement>(null)
 
   const openCtx = useCallback((e: React.MouseEvent, target: ContextTarget) => {
     e.preventDefault()
@@ -54,6 +57,20 @@ export default function SessionSidebar({
       onRenameGroup(renamingGroup, renameValue.trim())
     }
     setRenamingGroup(null)
+  }
+
+  const startCreatingGroup = () => {
+    setCreatingGroup(true)
+    setNewGroupValue('')
+    closeCtx()
+    setTimeout(() => newGroupInputRef.current?.focus(), 30)
+  }
+
+  const commitNewGroup = () => {
+    const name = newGroupValue.trim()
+    if (name) onNewConnection(name)
+    setCreatingGroup(false)
+    setNewGroupValue('')
   }
 
   const filtered = sessions.filter(s =>
@@ -139,12 +156,30 @@ export default function SessionSidebar({
                 </div>
               ))}
 
-              {sessions.length === 0 && (
+              {sessions.length === 0 && !creatingGroup && (
                 <div
                   className="sidebar-empty"
                   onContextMenu={e => openCtx(e, { type: 'blank' })}
                 >
                   Right-click to add a session or group
+                </div>
+              )}
+
+              {creatingGroup && (
+                <div className="new-group-row">
+                  <span className="session-icon">📁</span>
+                  <input
+                    ref={newGroupInputRef}
+                    className="group-rename-input"
+                    value={newGroupValue}
+                    placeholder="Group name…"
+                    onChange={e => setNewGroupValue(e.target.value)}
+                    onBlur={() => { setCreatingGroup(false); setNewGroupValue('') }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') commitNewGroup()
+                      if (e.key === 'Escape') { setCreatingGroup(false); setNewGroupValue('') }
+                    }}
+                  />
                 </div>
               )}
             </div>
@@ -196,11 +231,7 @@ export default function SessionSidebar({
             {contextMenu.target.type === 'blank' && (
               <>
                 <button onClick={() => { onNewConnection(); closeCtx() }}>+ New Session</button>
-                <button onClick={() => {
-                  const name = prompt('Group name:')?.trim()
-                  if (name) onNewConnection(name)
-                  closeCtx()
-                }}>📁 New Group</button>
+                <button onClick={startCreatingGroup}>📁 New Group</button>
               </>
             )}
 

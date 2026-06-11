@@ -333,6 +333,10 @@ body { font-family: system-ui, sans-serif; font-size: 13px; color: var(--text); 
 }
 .context-divider { height: 1px; background: var(--border); margin: 3px 0; }
 .group-count { color: var(--text-dim); font-size: 10px; }
+.new-group-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 10px;
+}
 .group-rename-input {
   background: var(--bg-0); border: 1px solid var(--accent);
   color: var(--text); padding: 1px 6px; border-radius: 3px;
