@@ -1,6 +1,6 @@
 {
   "name": "vaultterm",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Secure SSH terminal client with SFTP file browser",
   "main": "out/main/index.js",
   "author": "Derrick Frey",
