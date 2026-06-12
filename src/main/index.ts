@@ -5,6 +5,7 @@ import { registerSerialHandlers } from './serial-manager'
 import { registerCredentialHandlers } from './credential-store'
 import { registerTunnelHandlers, shutdownTunnels } from './tunnel-manager'
 import { registerSettingsHandlers } from './settings-store'
+import { registerKnownHostsHandlers } from './known-hosts'
 import { is } from '@electron-toolkit/utils'
 
 let mainWindow: BrowserWindow | null = null
@@ -116,6 +117,7 @@ app.whenReady().then(() => {
   registerCredentialHandlers()
   registerTunnelHandlers(mainWindow!)
   registerSettingsHandlers()
+  registerKnownHostsHandlers()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

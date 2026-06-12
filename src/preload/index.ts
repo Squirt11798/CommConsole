@@ -19,7 +19,16 @@ const api = {
     save: (session: object) => ipcRenderer.invoke('sessions:save', session),
     delete: (id: string) => ipcRenderer.invoke('sessions:delete', id),
     importMoba: (filePath: string): Promise<{ imported: number; skipped: number }> =>
-      ipcRenderer.invoke('sessions:importMoba', filePath)
+      ipcRenderer.invoke('sessions:importMoba', filePath),
+    exportBackup: (passphrase: string, filePath: string): Promise<{ exported: number }> =>
+      ipcRenderer.invoke('sessions:export', { passphrase, filePath }),
+    importBackup: (passphrase: string, filePath: string): Promise<{ imported: number }> =>
+      ipcRenderer.invoke('sessions:importBackup', { passphrase, filePath })
+  },
+
+  hosts: {
+    list: (): Promise<Array<{ entry: string; fingerprint: string }>> => ipcRenderer.invoke('hosts:list'),
+    forget: (entry: string) => ipcRenderer.invoke('hosts:forget', entry)
   },
 
   groups: {

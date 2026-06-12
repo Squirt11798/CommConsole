@@ -409,6 +409,31 @@ body { font-family: system-ui, sans-serif; font-size: 13px; color: var(--text); 
 .theme-card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
 .theme-dot { width: 16px; height: 16px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 0 1px rgba(0,0,0,0.3); }
 .settings-preview-note { color: var(--text-dim); font-size: 11px; font-style: italic; margin-top: 4px; }
+.settings-tabs { display: flex; gap: 4px; padding: 0 16px; border-bottom: 1px solid var(--border); }
+.settings-tabs button {
+  background: none; border: none; color: var(--text-dim); cursor: pointer;
+  padding: 8px 12px; font-size: 12px; border-bottom: 2px solid transparent;
+}
+.settings-tabs button:hover { color: var(--text); }
+.settings-tabs button.active { color: var(--text); border-bottom-color: var(--accent); }
+.hosts-list { display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto; }
+.host-row {
+  display: flex; align-items: center; gap: 8px; justify-content: space-between;
+  padding: 6px 8px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 4px;
+}
+.host-info { display: flex; flex-direction: column; min-width: 0; }
+.host-entry { font-size: 12px; font-weight: 600; }
+.host-fp { font-size: 10px; color: var(--text-dim); font-family: monospace; }
+.host-row button.danger { background: var(--bg-3); border: none; color: var(--text); padding: 4px 10px; border-radius: 3px; cursor: pointer; font-size: 11px; }
+.host-row button.danger:hover { background: var(--danger); color: #fff; }
+.backup-btns, .backup-form { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.backup-form input { flex: 1; min-width: 180px; }
+.backup-btns button, .backup-form button {
+  padding: 7px 12px; background: var(--bg-3); border: none; color: var(--text);
+  border-radius: 4px; cursor: pointer; font-size: 12px;
+}
+.backup-btns button:hover { background: var(--accent-dim); }
+.backup-msg { color: var(--success); font-size: 12px; margin-top: 4px; }
 
 /* SSH Tunnels */
 .tunnel-modal { width: 600px; max-width: 92vw; }

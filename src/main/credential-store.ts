@@ -8,7 +8,7 @@
 import { ipcMain, safeStorage, app } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
-import { randomUUID } from 'crypto'
+import { randomUUID, randomBytes, scryptSync, createCipheriv, createDecipheriv } from 'crypto'
 import { parseMobaConf } from './import-moba'
 
 export interface SavedSession {
@@ -72,6 +72,42 @@ function encrypt(plain: string): string {
 function decrypt(cipher: string): string {
   if (!cipher) return ''
   return safeStorage.decryptString(Buffer.from(cipher, 'base64'))
+}
+
+// ── Passphrase-based backup crypto (portable across machines) ───────────────
+// DPAPI blobs are machine+user bound, so for a portable backup we decrypt to
+// plaintext and re-encrypt under a key derived from a user passphrase.
+interface BackupEnvelope { app: string; v: number; salt: string; iv: string; tag: string; cipher: string }
+
+function encryptBackup(plaintext: string, passphrase: string): string {
+  const salt = randomBytes(16)
+  const iv = randomBytes(12)
+  const key = scryptSync(passphrase, salt, 32)
+  const c = createCipheriv('aes-256-gcm', key, iv)
+  const enc = Buffer.concat([c.update(plaintext, 'utf-8'), c.final()])
+  const tag = c.getAuthTag()
+  const env: BackupEnvelope = {
+    app: 'commconsole', v: 1,
+    salt: salt.toString('base64'), iv: iv.toString('base64'),
+    tag: tag.toString('base64'), cipher: enc.toString('base64')
+  }
+  return JSON.stringify(env, null, 2)
+}
+
+function decryptBackup(fileContent: string, passphrase: string): string {
+  let env: BackupEnvelope
+  try { env = JSON.parse(fileContent) } catch { throw new Error('Not a valid backup file.') }
+  if (env.app !== 'commconsole' || !env.salt || !env.iv || !env.tag || !env.cipher) {
+    throw new Error('Not a valid CommConsole backup file.')
+  }
+  const key = scryptSync(passphrase, Buffer.from(env.salt, 'base64'), 32)
+  const d = createDecipheriv('aes-256-gcm', key, Buffer.from(env.iv, 'base64'))
+  d.setAuthTag(Buffer.from(env.tag, 'base64'))
+  try {
+    return Buffer.concat([d.update(Buffer.from(env.cipher, 'base64')), d.final()]).toString('utf-8')
+  } catch {
+    throw new Error('Decryption failed — wrong passphrase or corrupt file.')
+  }
 }
 
 export function registerCredentialHandlers(): void {
@@ -216,6 +252,70 @@ export function registerCredentialHandlers(): void {
     saveGroups(groups)
     save(existing)
     return { imported: imported.length, skipped }
+  })
+
+  // ── Encrypted backup: export ────────────────────────────────────────────
+  // Decrypts each session's secrets (DPAPI) and re-encrypts the whole bundle
+  // under a passphrase-derived key so it can be restored on another machine.
+  ipcMain.handle('sessions:export', (_e, args: { passphrase: string; filePath: string }) => {
+    if (!args.passphrase || args.passphrase.length < 4) throw new Error('Passphrase must be at least 4 characters.')
+    const portable = load().map(s => ({
+      ...s,
+      // replace machine-bound ciphertext with plaintext for the portable bundle
+      password: decrypt(s.encryptedPassword),
+      privateKey: decrypt(s.encryptedPrivateKey),
+      passphraseSecret: decrypt(s.passphrase),
+      encryptedPassword: undefined,
+      encryptedPrivateKey: undefined,
+      passphrase: undefined
+    }))
+    const payload = JSON.stringify({ sessions: portable, groups: loadGroups() })
+    writeFileSync(args.filePath, encryptBackup(payload, args.passphrase), 'utf-8')
+    return { exported: portable.length }
+  })
+
+  // ── Encrypted backup: import ──────────────────────────────────────────────
+  ipcMain.handle('sessions:importBackup', (_e, args: { passphrase: string; filePath: string }) => {
+    const content = readFileSync(args.filePath, 'utf-8')
+    const json = JSON.parse(decryptBackup(content, args.passphrase))
+    const incoming: Array<Record<string, unknown>> = json.sessions || []
+    const incomingGroups: string[] = json.groups || []
+
+    const existing = load()
+    const byId = new Map(existing.map(s => [s.id, s] as const))
+
+    for (const p of incoming) {
+      const rec: SavedSession = {
+        id: String(p.id || randomUUID()),
+        name: String(p.name || 'Imported'),
+        host: String(p.host || ''),
+        port: Number(p.port || 0),
+        username: String(p.username || ''),
+        authType: (p.authType as SavedSession['authType']) || 'password',
+        keyPath: String(p.keyPath || ''),
+        serialPort: String(p.serialPort || ''),
+        baudRate: Number(p.baudRate || 9600),
+        dataBits: Number(p.dataBits || 8),
+        parity: String(p.parity || 'none'),
+        stopBits: Number(p.stopBits || 1),
+        color: String(p.color || ''),
+        // re-encrypt secrets with the local machine's DPAPI key
+        encryptedPassword: p.password ? encrypt(String(p.password)) : '',
+        encryptedPrivateKey: p.privateKey ? encrypt(String(p.privateKey)) : '',
+        passphrase: p.passphraseSecret ? encrypt(String(p.passphraseSecret)) : '',
+        group: String(p.group || ''),
+        createdAt: String(p.createdAt || new Date().toISOString())
+      }
+      byId.set(rec.id, rec)
+    }
+
+    save([...byId.values()])
+
+    const groups = loadGroups()
+    for (const g of incomingGroups) if (g && !groups.includes(g)) groups.push(g)
+    saveGroups(groups)
+
+    return { imported: incoming.length }
   })
 
   // Returns decrypted credentials — only called internally by ssh-manager via direct import

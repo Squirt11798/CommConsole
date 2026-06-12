@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 
 export interface AppSettings {
   theme: string
@@ -11,6 +11,7 @@ interface Props {
   settings: AppSettings
   groups: string[]
   onApply: (patch: Partial<AppSettings>) => void   // live preview
+  onSessionsChanged: () => void                    // after a backup import
   onClose: () => void
 }
 
@@ -30,20 +31,60 @@ const FONTS = [
   'monospace'
 ]
 
-export default function SettingsModal({ settings, groups, onApply, onClose }: Props) {
+export default function SettingsModal({ settings, groups, onApply, onSessionsChanged, onClose }: Props) {
   const [local, setLocal] = useState<AppSettings>(settings)
+  const [tab, setTab] = useState<'appearance' | 'security'>('appearance')
+  const [hosts, setHosts] = useState<Array<{ entry: string; fingerprint: string }>>([])
+  const [backupMode, setBackupMode] = useState<'idle' | 'export' | 'import'>('idle')
+  const [passphrase, setPassphrase] = useState('')
+  const [backupMsg, setBackupMsg] = useState('')
+  const [backupErr, setBackupErr] = useState('')
+
+  const loadHosts = useCallback(() => {
+    window.api.hosts.list().then(setHosts).catch(() => {})
+  }, [])
 
   useEffect(() => {
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', esc)
+    loadHosts()
     return () => window.removeEventListener('keydown', esc)
-  }, [onClose])
+  }, [onClose, loadHosts])
 
   // Live-preview each change immediately
   const patch = (p: Partial<AppSettings>) => {
     const next = { ...local, ...p }
     setLocal(next)
     onApply(p)
+  }
+
+  const forgetHost = async (entry: string) => {
+    if (!confirm(`Forget trusted host "${entry}"? You'll be asked to re-verify its fingerprint on next connect.`)) return
+    await window.api.hosts.forget(entry)
+    loadHosts()
+  }
+
+  const runBackup = async () => {
+    setBackupErr(''); setBackupMsg('')
+    if (passphrase.length < 4) { setBackupErr('Passphrase must be at least 4 characters.'); return }
+    try {
+      if (backupMode === 'export') {
+        const path = await window.api.dialog.saveFile('commconsole-backup.ccbak')
+        if (!path) return
+        const { exported } = await window.api.sessions.exportBackup(passphrase, path)
+        setBackupMsg(`Exported ${exported} session(s).`)
+      } else {
+        const files = await window.api.dialog.openFile()
+        if (!files || files.length === 0) return
+        const { imported } = await window.api.sessions.importBackup(passphrase, files[0])
+        setBackupMsg(`Imported ${imported} session(s).`)
+        onSessionsChanged()
+      }
+      setPassphrase('')
+      setBackupMode('idle')
+    } catch (err) {
+      setBackupErr(err instanceof Error ? err.message : String(err))
+    }
   }
 
   return (
@@ -54,7 +95,14 @@ export default function SettingsModal({ settings, groups, onApply, onClose }: Pr
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
 
+        <div className="settings-tabs">
+          <button className={tab === 'appearance' ? 'active' : ''} onClick={() => setTab('appearance')}>Appearance</button>
+          <button className={tab === 'security' ? 'active' : ''} onClick={() => setTab('security')}>Security &amp; Backup</button>
+        </div>
+
         <div className="modal-body">
+         {tab === 'appearance' && (
+          <>
           <div className="form-row">
             <label>Theme</label>
             <div className="theme-grid">
@@ -100,6 +148,58 @@ export default function SettingsModal({ settings, groups, onApply, onClose }: Pr
           </div>
 
           <p className="settings-preview-note">Changes apply instantly and are saved automatically.</p>
+          </>
+         )}
+
+         {tab === 'security' && (
+          <>
+          <div className="form-row">
+            <label>Trusted Hosts ({hosts.length})</label>
+            <div className="hosts-list">
+              {hosts.length === 0 && <p className="settings-preview-note">No trusted hosts yet.</p>}
+              {hosts.map(h => (
+                <div key={h.entry} className="host-row">
+                  <div className="host-info">
+                    <span className="host-entry">{h.entry}</span>
+                    <span className="host-fp">SHA256:{h.fingerprint.slice(0, 24)}…</span>
+                  </div>
+                  <button className="danger" onClick={() => forgetHost(h.entry)}>Forget</button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="form-row">
+            <label>Encrypted Backup</label>
+            <p className="settings-preview-note">
+              Export all sessions (including credentials) to a passphrase-encrypted file you can restore on another machine.
+            </p>
+            {backupMode === 'idle' ? (
+              <div className="backup-btns">
+                <button onClick={() => { setBackupErr(''); setBackupMsg(''); setBackupMode('export') }}>Export…</button>
+                <button onClick={() => { setBackupErr(''); setBackupMsg(''); setBackupMode('import') }}>Import…</button>
+              </div>
+            ) : (
+              <div className="backup-form">
+                <input
+                  type="password"
+                  autoFocus
+                  placeholder={backupMode === 'export' ? 'Set a passphrase for the backup' : 'Backup passphrase'}
+                  value={passphrase}
+                  onChange={e => setPassphrase(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') runBackup() }}
+                />
+                <button className="btn-primary" onClick={runBackup}>
+                  {backupMode === 'export' ? 'Choose File & Export' : 'Choose File & Import'}
+                </button>
+                <button onClick={() => { setBackupMode('idle'); setPassphrase(''); setBackupErr('') }}>Cancel</button>
+              </div>
+            )}
+            {backupMsg && <div className="backup-msg">{backupMsg}</div>}
+            {backupErr && <div className="tunnel-err">{backupErr}</div>}
+          </div>
+          </>
+         )}
         </div>
 
         <div className="modal-footer">

@@ -328,6 +328,7 @@ export default function App() {
           settings={settings}
           groups={groups}
           onApply={applySettings}
+          onSessionsChanged={loadSessions}
           onClose={() => setShowSettings(false)}
         />
       )}

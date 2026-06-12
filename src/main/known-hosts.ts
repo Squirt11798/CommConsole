@@ -5,7 +5,7 @@
  * On subsequent connects a mismatch aborts the connection with a warning.
  */
 
-import { app } from 'electron'
+import { app, ipcMain } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { createHash } from 'crypto'
@@ -54,4 +54,19 @@ export function forgetHost(host: string, port: number): void {
   const hosts = load()
   delete hosts[entry]
   store(hosts)
+}
+
+/** List all trusted hosts for the management UI. */
+export function listHosts(): Array<{ entry: string; fingerprint: string }> {
+  const hosts = load()
+  return Object.keys(hosts).sort().map(entry => ({ entry, fingerprint: hosts[entry] }))
+}
+
+export function registerKnownHostsHandlers(): void {
+  ipcMain.handle('hosts:list', () => listHosts())
+  ipcMain.handle('hosts:forget', (_e, entry: string) => {
+    const hosts = load()
+    delete hosts[entry]
+    store(hosts)
+  })
 }
