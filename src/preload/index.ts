@@ -73,6 +73,8 @@ const api = {
       return () => ipcRenderer.off('ssh:data', handler)
     },
     getStats: (connId: string): Promise<string> => ipcRenderer.invoke('ssh:getStats', connId),
+    info: (connId: string): Promise<{ cipher: string; kex: string } | null> => ipcRenderer.invoke('ssh:info', connId),
+    ping: (connId: string): Promise<number> => ipcRenderer.invoke('ssh:ping', connId),
     onClosed: (cb: (connId: string) => void) => {
       const handler = (_e: Electron.IpcRendererEvent, connId: string) => cb(connId)
       ipcRenderer.on('ssh:closed', handler)

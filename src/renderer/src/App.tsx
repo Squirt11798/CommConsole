@@ -10,6 +10,7 @@ import TunnelManager from './components/TunnelManager'
 import SettingsModal from './components/SettingsModal'
 import type { AppSettings } from './components/SettingsModal'
 import LockScreen from './components/LockScreen'
+import StatusBar from './components/StatusBar'
 
 export interface Tab {
   id: string
@@ -17,6 +18,7 @@ export interface Tab {
   host: string
   connType: 'ssh' | 'serial'
   color: string   // tag color (hex); '' = none
+  openedAt: number // ms epoch when the connection opened (for uptime)
 }
 
 export interface SavedSession {
@@ -164,7 +166,7 @@ export default function App() {
         tabHost = opts.host
       }
 
-      const tab: Tab = { id, label: opts.label, host: tabHost, connType, color: opts.color ?? '' }
+      const tab: Tab = { id, label: opts.label, host: tabHost, connType, color: opts.color ?? '', openedAt: Date.now() }
       setTabs(prev => [...prev, tab])
       setActiveTab(id)
       setShowConnect(false)
@@ -328,8 +330,13 @@ export default function App() {
           </div>
 
           {/* Resource monitor bar — only when connected and enabled */}
-          {isConnected && showMonitor && activeTabData && (
+          {isConnected && showMonitor && activeTabData && !isSerialTab && (
             <ResourceMonitor connId={activeTabData.id} />
+          )}
+
+          {/* Status bar — connection info, latency, cipher, uptime */}
+          {isConnected && activeTabData && (
+            <StatusBar tab={activeTabData} />
           )}
         </div>
       </div>

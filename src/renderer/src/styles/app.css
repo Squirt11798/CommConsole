@@ -696,6 +696,24 @@ body { font-family: system-ui, sans-serif; font-size: 13px; color: var(--text); 
   margin-bottom: 8px; white-space: pre-wrap;
 }
 
+/* ── Status bar ── */
+.status-bar {
+  height: 24px; flex-shrink: 0;
+  background: var(--bg-1); border-top: 1px solid var(--border);
+  display: flex; align-items: center; gap: 8px; padding: 0 10px;
+  font-size: 11px; color: var(--text-dim); overflow: hidden;
+}
+.status-bar .sb-item { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+.status-bar .sb-label { color: var(--text-dim); text-transform: uppercase; font-size: 10px; letter-spacing: 0.5px; }
+.status-bar .sb-val { color: var(--text); font-family: monospace; }
+.status-bar .sb-val.good { color: var(--success); }
+.status-bar .sb-val.warn { color: var(--accent); }
+.status-bar .sb-val.bad  { color: var(--danger); }
+.status-bar .sb-sep { width: 1px; height: 12px; background: var(--border); }
+.status-bar .sb-dot { width: 7px; height: 7px; border-radius: 50%; }
+.status-bar .sb-dot.ssh { background: var(--success); }
+.status-bar .sb-dot.serial { background: var(--accent); }
+
 /* ── Scrollbars ── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }

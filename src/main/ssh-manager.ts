@@ -10,6 +10,8 @@ interface Connection {
   client: Client
   sftp: SFTPWrapper | null
   sessionId: string | null  // saved session id, if launched from one
+  cipher?: string           // negotiated client->server cipher (from handshake)
+  kex?: string              // negotiated key-exchange algorithm
 }
 
 const connections = new Map<string, Connection>()
@@ -106,12 +108,14 @@ export function registerSshHandlers(win: BrowserWindow): void {
 
     return new Promise<{ id: string }>((resolve, reject) => {
       const client = new Client()
+      let negCipher: string | undefined
+      let negKex: string | undefined
 
       client.on('ready', () => {
         client.shell({ term: 'xterm-256color' }, (err, stream) => {
           if (err) { client.end(); return reject(err) }
 
-          connections.set(connId, { id: connId, client, sftp: null, sessionId: opts.sessionId ?? null })
+          connections.set(connId, { id: connId, client, sftp: null, sessionId: opts.sessionId ?? null, cipher: negCipher, kex: negKex })
 
           stream.on('data', (data: Buffer) => {
             send(win, 'ssh:data', connId, data.toString('binary'))
@@ -149,6 +153,14 @@ export function registerSshHandlers(win: BrowserWindow): void {
         } else {
           reject(err)
         }
+      })
+
+      // Capture negotiated crypto for the status bar (fires before 'ready')
+      client.on('handshake', (neg: { kex?: string; cs?: { cipher?: string } }) => {
+        negCipher = neg?.cs?.cipher
+        negKex = neg?.kex
+        const conn = connections.get(connId)
+        if (conn) { conn.cipher = negCipher; conn.kex = negKex }
       })
 
       // keyboard-interactive: when prompts arrive, forward to renderer and await answers
@@ -364,6 +376,27 @@ export function registerSshHandlers(win: BrowserWindow): void {
     'echo "TX:${TXS:-0}";',
     '\''
   ].join(' ')
+
+  ipcMain.handle('ssh:info', (_e, connId: string) => {
+    const conn = connections.get(connId)
+    if (!conn) return null
+    return { cipher: conn.cipher ?? '', kex: conn.kex ?? '' }
+  })
+
+  // Round-trip latency: time a trivial exec round trip.
+  ipcMain.handle('ssh:ping', (_e, connId: string): Promise<number> => {
+    const conn = connections.get(connId)
+    if (!conn) return Promise.reject(new Error('Not connected'))
+    return new Promise((resolve, reject) => {
+      const t0 = Date.now()
+      conn.client.exec('true', (err, stream) => {
+        if (err) return reject(err)
+        stream.on('close', () => resolve(Date.now() - t0))
+        stream.on('data', () => {})
+        stream.stderr.on('data', () => {})
+      })
+    })
+  })
 
   ipcMain.handle('ssh:getStats', (_e, connId: string): Promise<string> => {
     const conn = connections.get(connId)
