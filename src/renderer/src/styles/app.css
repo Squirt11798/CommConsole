@@ -471,6 +471,51 @@ body { font-family: system-ui, sans-serif; font-size: 13px; color: var(--text); 
 .rm-bar-fill { height: 100%; border-radius: 4px; transition: width 0.4s ease, background 0.4s ease; }
 .rm-divider { width: 1px; height: 18px; background: var(--border); margin: 0 6px; flex-shrink: 0; }
 
+/* ── Serial connection config ── */
+.serial-config { display: flex; flex-direction: column; gap: 12px; }
+.serial-port-row { display: flex; gap: 6px; align-items: center; }
+.serial-port-select { flex: 1; }
+.serial-refresh-btn {
+  padding: 6px 10px; font-size: 14px; line-height: 1;
+  background: var(--bg-3); border: 1px solid var(--border);
+  border-radius: 4px; color: var(--text); cursor: pointer;
+  flex-shrink: 0;
+}
+.serial-refresh-btn:hover { background: var(--bg-4, var(--bg-3)); border-color: var(--accent-dim); }
+.serial-refresh-btn:disabled { opacity: 0.5; cursor: default; }
+.serial-port-manual {
+  margin-top: 4px;
+  font-size: 11px !important;
+  padding: 5px 8px !important;
+  color: var(--text-dim) !important;
+}
+.serial-advanced {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0;
+  overflow: hidden;
+}
+.serial-advanced > summary {
+  padding: 6px 10px;
+  font-size: 11px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  user-select: none;
+  background: var(--bg-2);
+  list-style: none;
+}
+.serial-advanced > summary:hover { color: var(--text); }
+.serial-advanced[open] > summary { border-bottom: 1px solid var(--border); }
+.serial-advanced-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg-1);
+}
+
 /* ── SSH keyboard-interactive prompt modal ── */
 .ssh-prompt-server {
   font-size: 12px; font-weight: 600; color: var(--accent);

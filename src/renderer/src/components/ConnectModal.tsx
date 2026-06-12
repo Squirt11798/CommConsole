@@ -1,15 +1,22 @@
 import { useState, useEffect } from 'react'
 import type { SavedSession } from '../App'
 
+const BAUD_RATES = [300, 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600]
+
 interface ConnectOpts {
   sessionId?: string
   host: string
   port: number
   username: string
-  authType: 'password' | 'key'
+  authType: 'password' | 'key' | 'serial'
   password?: string
   privateKeyPath?: string
   passphrase?: string
+  serialPort?: string
+  baudRate?: number
+  dataBits?: number
+  parity?: string
+  stopBits?: number
   label: string
 }
 
@@ -27,12 +34,20 @@ export default function ConnectModal({ prefill, defaultGroup, groups, onConnect,
   const [host, setHost] = useState(prefill?.host ?? '')
   const [port, setPort] = useState(String(prefill?.port ?? 22))
   const [username, setUsername] = useState(prefill?.username ?? '')
-  const [authType, setAuthType] = useState<'password' | 'key'>(prefill?.authType ?? 'password')
+  const [authType, setAuthType] = useState<'password' | 'key' | 'serial'>(prefill?.authType ?? 'password')
   const [password, setPassword] = useState('')
   const [keyPath, setKeyPath] = useState(prefill?.keyPath ?? '')
   const [passphrase, setPassphrase] = useState('')
   const [group, setGroup] = useState(prefill?.group ?? defaultGroup ?? '')
   const [connecting, setConnecting] = useState(false)
+  // Serial-specific state
+  const [serialPort, setSerialPort] = useState(prefill?.serialPort ?? '')
+  const [baudRate, setBaudRate] = useState(String(prefill?.baudRate ?? 9600))
+  const [dataBits, setDataBits] = useState(String(prefill?.dataBits ?? 8))
+  const [parity, setParity] = useState(prefill?.parity ?? 'none')
+  const [stopBits, setStopBits] = useState(String(prefill?.stopBits ?? 1))
+  const [availablePorts, setAvailablePorts] = useState<Array<{ path: string; manufacturer: string }>>([])
+  const [loadingPorts, setLoadingPorts] = useState(false)
 
   useEffect(() => {
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -40,40 +55,68 @@ export default function ConnectModal({ prefill, defaultGroup, groups, onConnect,
     return () => window.removeEventListener('keydown', esc)
   }, [onClose])
 
+  const refreshPorts = async () => {
+    setLoadingPorts(true)
+    try {
+      const ports = await window.api.serial.listPorts()
+      setAvailablePorts(ports)
+      // Auto-select first port if none chosen
+      if (ports.length > 0 && !serialPort) setSerialPort(ports[0].path)
+    } catch { /* silently ignore — port may not be available */ }
+    finally { setLoadingPorts(false) }
+  }
+
+  useEffect(() => {
+    if (authType === 'serial') refreshPorts()
+  }, [authType])  // eslint-disable-line react-hooks/exhaustive-deps
+
   const pickKey = async () => {
     const p = await window.api.dialog.openKey()
     if (p) setKeyPath(p)
   }
 
+  const isSerial = authType === 'serial'
+  const canConnect = isSerial ? !!serialPort : (!!host && !!username)
+
   const buildSessionObj = (savedId?: string) => ({
     id: savedId ?? prefill?.id,
-    name: name || `${username}@${host}`,
-    host,
-    port: parseInt(port) || 22,
-    username,
+    name: name || (isSerial ? (serialPort || 'Serial') : `${username}@${host}`),
+    host: isSerial ? '' : host,
+    port: isSerial ? 0 : (parseInt(port) || 22),
+    username: isSerial ? '' : username,
     authType,
     password: authType === 'password' ? password : undefined,
     keyPath: authType === 'key' ? keyPath : '',
     passphrase: authType === 'key' ? passphrase : undefined,
+    serialPort: isSerial ? serialPort : '',
+    baudRate: isSerial ? (parseInt(baudRate) || 9600) : 0,
+    dataBits: isSerial ? parseInt(dataBits) : undefined,
+    parity: isSerial ? parity : undefined,
+    stopBits: isSerial ? parseInt(stopBits) : undefined,
     group
   })
 
   // Connect auto-saves so the session always appears in the sidebar
   const handleConnect = async () => {
-    if (!host || !username || connecting) return
+    if (!canConnect || connecting) return
     setConnecting(true)
     try {
       const savedId = await onSave(buildSessionObj())
       await onConnect({
         sessionId: savedId ?? prefill?.id,
-        host,
-        port: parseInt(port) || 22,
-        username,
+        host: isSerial ? '' : host,
+        port: isSerial ? 0 : (parseInt(port) || 22),
+        username: isSerial ? '' : username,
         authType,
         password: authType === 'password' ? password : undefined,
         privateKeyPath: authType === 'key' ? keyPath : undefined,
         passphrase: authType === 'key' ? passphrase : undefined,
-        label: name || `${username}@${host}`
+        serialPort: isSerial ? serialPort : undefined,
+        baudRate: isSerial ? (parseInt(baudRate) || 9600) : undefined,
+        dataBits: isSerial ? parseInt(dataBits) : undefined,
+        parity: isSerial ? parity : undefined,
+        stopBits: isSerial ? parseInt(stopBits) : undefined,
+        label: name || (isSerial ? (serialPort || 'Serial') : `${username}@${host}`)
       })
       // Success path: App.tsx closes the modal, component unmounts
     } catch {
@@ -110,68 +153,155 @@ export default function ConnectModal({ prefill, defaultGroup, groups, onConnect,
             </select>
           </div>
 
-          <div className="form-row two-col">
-            <div>
-              <label>Host / IP</label>
-              <input value={host} onChange={e => setHost(e.target.value)} placeholder="192.168.1.1" autoFocus={!!prefill} />
-            </div>
-            <div>
-              <label>Port</label>
-              <input value={port} onChange={e => setPort(e.target.value)} placeholder="22" style={{ width: 70 }} />
-            </div>
-          </div>
-
           <div className="form-row">
-            <label>Username</label>
-            <input value={username} onChange={e => setUsername(e.target.value)} placeholder="root" />
-          </div>
-
-          <div className="form-row">
-            <label>Authentication</label>
+            <label>Connection Type</label>
             <div className="radio-group">
               <label>
                 <input type="radio" value="password" checked={authType === 'password'} onChange={() => setAuthType('password')} />
-                Password
+                SSH — Password
               </label>
               <label>
                 <input type="radio" value="key" checked={authType === 'key'} onChange={() => setAuthType('key')} />
-                Private Key
+                SSH — Private Key
+              </label>
+              <label>
+                <input type="radio" value="serial" checked={authType === 'serial'} onChange={() => setAuthType('serial')} />
+                Serial / COM
               </label>
             </div>
           </div>
 
-          {authType === 'password' && (
-            <div className="form-row">
-              <label>Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder={prefill ? '(stored — enter to change)' : ''}
-                onKeyDown={e => { if (e.key === 'Enter') handleConnect() }}
-              />
-            </div>
-          )}
-
-          {authType === 'key' && (
+          {!isSerial && (
             <>
-              <div className="form-row">
-                <label>Private Key File</label>
-                <div className="file-row">
-                  <input value={keyPath} onChange={e => setKeyPath(e.target.value)} placeholder="/home/you/.ssh/id_rsa" readOnly />
-                  <button onClick={pickKey}>Browse…</button>
+              <div className="form-row two-col">
+                <div>
+                  <label>Host / IP</label>
+                  <input value={host} onChange={e => setHost(e.target.value)} placeholder="192.168.1.1" autoFocus={!!prefill} />
+                </div>
+                <div>
+                  <label>Port</label>
+                  <input value={port} onChange={e => setPort(e.target.value)} placeholder="22" style={{ width: 70 }} />
                 </div>
               </div>
+
               <div className="form-row">
-                <label>Passphrase</label>
+                <label>Username</label>
+                <input value={username} onChange={e => setUsername(e.target.value)} placeholder="root" />
+              </div>
+
+              {authType === 'password' && (
+                <div className="form-row">
+                  <label>Password</label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    placeholder={prefill ? '(stored — enter to change)' : ''}
+                    onKeyDown={e => { if (e.key === 'Enter') handleConnect() }}
+                  />
+                </div>
+              )}
+
+              {authType === 'key' && (
+                <>
+                  <div className="form-row">
+                    <label>Private Key File</label>
+                    <div className="file-row">
+                      <input value={keyPath} onChange={e => setKeyPath(e.target.value)} placeholder="/home/you/.ssh/id_rsa" readOnly />
+                      <button onClick={pickKey}>Browse…</button>
+                    </div>
+                  </div>
+                  <div className="form-row">
+                    <label>Passphrase</label>
+                    <input
+                      type="password"
+                      value={passphrase}
+                      onChange={e => setPassphrase(e.target.value)}
+                      placeholder="(if key is encrypted)"
+                    />
+                  </div>
+                </>
+              )}
+            </>
+          )}
+
+          {isSerial && (
+            <div className="serial-config">
+              <div className="form-row">
+                <label>COM Port</label>
+                <div className="serial-port-row">
+                  <select
+                    className="form-select serial-port-select"
+                    value={serialPort}
+                    onChange={e => setSerialPort(e.target.value)}
+                  >
+                    {availablePorts.length === 0 && <option value="">— no ports detected —</option>}
+                    {availablePorts.map(p => (
+                      <option key={p.path} value={p.path}>
+                        {p.path}{p.manufacturer ? ` — ${p.manufacturer}` : ''}
+                      </option>
+                    ))}
+                    {/* Allow manually typed value if not in list */}
+                    {serialPort && !availablePorts.find(p => p.path === serialPort) && (
+                      <option value={serialPort}>{serialPort} (manual)</option>
+                    )}
+                  </select>
+                  <button
+                    className="serial-refresh-btn"
+                    onClick={refreshPorts}
+                    disabled={loadingPorts}
+                    title="Refresh port list"
+                  >
+                    {loadingPorts ? '…' : '↻'}
+                  </button>
+                </div>
                 <input
-                  type="password"
-                  value={passphrase}
-                  onChange={e => setPassphrase(e.target.value)}
-                  placeholder="(if key is encrypted)"
+                  className="serial-port-manual"
+                  value={serialPort}
+                  onChange={e => setSerialPort(e.target.value)}
+                  placeholder="or type manually: COM3, /dev/ttyUSB0"
                 />
               </div>
-            </>
+
+              <div className="form-row">
+                <label>Baud Rate</label>
+                <select className="form-select" value={baudRate} onChange={e => setBaudRate(e.target.value)}>
+                  {BAUD_RATES.map(b => (
+                    <option key={b} value={b}>{b.toLocaleString()}</option>
+                  ))}
+                </select>
+              </div>
+
+              <details className="serial-advanced">
+                <summary>Advanced (Data/Parity/Stop)</summary>
+                <div className="serial-advanced-grid">
+                  <div className="form-row">
+                    <label>Data Bits</label>
+                    <select className="form-select" value={dataBits} onChange={e => setDataBits(e.target.value)}>
+                      <option value="8">8</option>
+                      <option value="7">7</option>
+                      <option value="6">6</option>
+                      <option value="5">5</option>
+                    </select>
+                  </div>
+                  <div className="form-row">
+                    <label>Parity</label>
+                    <select className="form-select" value={parity} onChange={e => setParity(e.target.value)}>
+                      <option value="none">None</option>
+                      <option value="odd">Odd</option>
+                      <option value="even">Even</option>
+                    </select>
+                  </div>
+                  <div className="form-row">
+                    <label>Stop Bits</label>
+                    <select className="form-select" value={stopBits} onChange={e => setStopBits(e.target.value)}>
+                      <option value="1">1</option>
+                      <option value="2">2</option>
+                    </select>
+                  </div>
+                </div>
+              </details>
+            </div>
           )}
         </div>
 
@@ -179,7 +309,7 @@ export default function ConnectModal({ prefill, defaultGroup, groups, onConnect,
           <button
             className="btn-primary"
             onClick={handleConnect}
-            disabled={!host || !username || connecting}
+            disabled={!canConnect || connecting}
           >
             {connecting ? 'Connecting…' : 'Connect'}
           </button>

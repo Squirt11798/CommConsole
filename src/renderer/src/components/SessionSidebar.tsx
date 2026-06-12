@@ -206,9 +206,11 @@ export default function SessionSidebar({
                       onDragEnd={() => { setDragSessionId(null); setDropTarget(null) }}
                       onClick={() => onOpenSession(s)}
                       onContextMenu={e => openCtx(e, { type: 'session', session: s })}
-                      title={`${s.username}@${s.host}:${s.port}`}
+                      title={s.authType === 'serial' ? `${s.serialPort} @ ${s.baudRate} baud` : `${s.username}@${s.host}:${s.port}`}
                     >
-                      <span className="session-icon">{s.authType === 'key' ? '🔑' : '🔒'}</span>
+                      <span className="session-icon">
+                        {s.authType === 'serial' ? '🔌' : s.authType === 'key' ? '🔑' : '🔒'}
+                      </span>
                       <div className="session-info">
                         <span className="session-name">{s.name}</span>
                         <span className="session-host">{s.host}</span>

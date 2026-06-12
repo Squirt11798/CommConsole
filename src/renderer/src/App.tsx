@@ -11,6 +11,7 @@ export interface Tab {
   id: string
   label: string
   host: string
+  connType: 'ssh' | 'serial'
 }
 
 export interface SavedSession {
@@ -19,8 +20,13 @@ export interface SavedSession {
   host: string
   port: number
   username: string
-  authType: 'password' | 'key'
-  keyPath: string   // path to key file; empty for password auth
+  authType: 'password' | 'key' | 'serial'
+  keyPath: string       // path to key file; empty for non-key auth
+  serialPort: string    // COM port path; empty for SSH sessions
+  baudRate: number
+  dataBits: number
+  parity: string
+  stopBits: number
   group: string
   createdAt: string
 }
@@ -78,15 +84,41 @@ export default function App() {
     host: string
     port: number
     username: string
-    authType: 'password' | 'key'
+    authType: 'password' | 'key' | 'serial'
     password?: string
     privateKeyPath?: string
     passphrase?: string
+    serialPort?: string
+    baudRate?: number
+    dataBits?: number
+    parity?: string
+    stopBits?: number
     label: string
   }): Promise<void> => {
     try {
-      const { id } = await window.api.ssh.connect(opts)
-      const tab: Tab = { id, label: opts.label, host: opts.host }
+      let id: string
+      let connType: 'ssh' | 'serial'
+      let tabHost: string
+
+      if (opts.authType === 'serial') {
+        const result = await window.api.serial.connect({
+          path: opts.serialPort!,
+          baudRate: opts.baudRate ?? 9600,
+          dataBits: opts.dataBits,
+          parity: opts.parity,
+          stopBits: opts.stopBits
+        })
+        id = result.id
+        connType = 'serial'
+        tabHost = opts.serialPort!
+      } else {
+        const result = await window.api.ssh.connect(opts)
+        id = result.id
+        connType = 'ssh'
+        tabHost = opts.host
+      }
+
+      const tab: Tab = { id, label: opts.label, host: tabHost, connType }
       setTabs(prev => [...prev, tab])
       setActiveTab(id)
       setShowConnect(false)
@@ -119,13 +151,18 @@ export default function App() {
   }, [loadSessions])
 
   const closeTab = useCallback(async (connId: string) => {
-    await window.api.ssh.disconnect(connId)
+    const tab = tabs.find(t => t.id === connId)
+    if (tab?.connType === 'serial') {
+      await window.api.serial.disconnect(connId)
+    } else {
+      await window.api.ssh.disconnect(connId)
+    }
     setTabs(prev => {
       const next = prev.filter(t => t.id !== connId)
       setActiveTab(cur => cur === connId ? (next[next.length - 1]?.id ?? null) : cur)
       return next
     })
-  }, [])
+  }, [tabs])
 
   const toggleRightPanel = (panel: RightPanel) => {
     setRightPanel(prev => prev === panel ? 'none' : panel)
@@ -133,6 +170,7 @@ export default function App() {
 
   const activeTabData = tabs.find(t => t.id === activeTab)
   const isConnected = tabs.length > 0 && activeTab !== null
+  const isSerialTab = activeTabData?.connType === 'serial'
 
   return (
     <div className="app">
@@ -188,17 +226,17 @@ export default function App() {
               <div className="tab-toolbar">
                 <button
                   className={`toolbar-btn ${rightPanel === 'sftp' ? 'active' : ''}`}
-                  title="File Browser (SFTP)"
+                  title={isSerialTab ? 'SFTP not available for serial connections' : 'File Browser (SFTP)'}
                   onClick={() => toggleRightPanel('sftp')}
-                  disabled={!isConnected}
+                  disabled={!isConnected || isSerialTab}
                 >
                   📁
                 </button>
                 <button
                   className={`toolbar-btn ${showMonitor ? 'active' : ''}`}
-                  title="Resource Monitor"
+                  title={isSerialTab ? 'Resource Monitor not available for serial connections' : 'Resource Monitor'}
                   onClick={() => setShowMonitor(v => !v)}
-                  disabled={!isConnected}
+                  disabled={!isConnected || isSerialTab}
                 >
                   📊
                 </button>

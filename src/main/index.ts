@@ -1,6 +1,7 @@
 import { app, BrowserWindow, shell, ipcMain, safeStorage, dialog } from 'electron'
 import { join } from 'path'
 import { registerSshHandlers } from './ssh-manager'
+import { registerSerialHandlers } from './serial-manager'
 import { registerCredentialHandlers } from './credential-store'
 import { is } from '@electron-toolkit/utils'
 
@@ -109,6 +110,7 @@ app.whenReady().then(() => {
   // safeStorage uses DPAPI on Windows — must be ready before encrypting
   createWindow()
   registerSshHandlers(mainWindow!)
+  registerSerialHandlers(mainWindow!)
   registerCredentialHandlers()
 
   app.on('activate', () => {

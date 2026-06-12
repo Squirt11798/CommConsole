@@ -55,6 +55,14 @@ const api = {
       ipcRenderer.send('ssh:promptResponse', promptId, answers)
   },
 
+  serial: {
+    listPorts: (): Promise<Array<{ path: string; manufacturer: string; serialNumber: string; pnpId: string }>> =>
+      ipcRenderer.invoke('serial:list'),
+    connect: (opts: { path: string; baudRate: number; dataBits?: number; parity?: string; stopBits?: number }): Promise<{ id: string }> =>
+      ipcRenderer.invoke('serial:connect', opts),
+    disconnect: (connId: string) => ipcRenderer.invoke('serial:disconnect', connId)
+  },
+
   sftp: {
     list: (connId: string, path: string) => ipcRenderer.invoke('sftp:list', connId, path),
     download: (connId: string, remotePath: string, localPath: string) =>

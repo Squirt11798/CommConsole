@@ -17,8 +17,14 @@ export interface SavedSession {
   host: string
   port: number
   username: string
-  authType: 'password' | 'key'
+  authType: 'password' | 'key' | 'serial'
   keyPath: string             // path to key file on disk (not secret)
+  // serial connection settings (authType === 'serial')
+  serialPort: string          // COM3, /dev/ttyUSB0, etc.
+  baudRate: number            // 9600, 115200, etc.
+  dataBits: number            // 5 | 6 | 7 | 8
+  parity: string              // none | odd | even
+  stopBits: number            // 1 | 2
   // stored encrypted (base64) or empty string
   encryptedPassword: string
   encryptedPrivateKey: string
@@ -79,40 +85,56 @@ export function registerCredentialHandlers(): void {
     host: string
     port: number
     username: string
-    authType: 'password' | 'key'
+    authType: 'password' | 'key' | 'serial'
     keyPath?: string
+    serialPort?: string
+    baudRate?: number
+    dataBits?: number
+    parity?: string
+    stopBits?: number
     password?: string
     privateKey?: string
     passphrase?: string
     group?: string
   }) => {
     // Validate fields before persisting
-    if (typeof session.host !== 'string' || !session.host.trim()) {
-      throw new Error('Host is required')
+    if (session.authType !== 'serial') {
+      if (typeof session.host !== 'string' || !session.host.trim()) {
+        throw new Error('Host is required')
+      }
+      if (typeof session.username !== 'string' || !session.username.trim()) {
+        throw new Error('Username is required')
+      }
     }
     const port = parseInt(String(session.port), 10)
-    if (isNaN(port) || port < 1 || port > 65535) {
+    if (session.authType !== 'serial' && (isNaN(port) || port < 1 || port > 65535)) {
       throw new Error('Port must be between 1 and 65535')
     }
-    if (typeof session.username !== 'string' || !session.username.trim()) {
-      throw new Error('Username is required')
-    }
-    if (session.authType !== 'password' && session.authType !== 'key') {
-      throw new Error('authType must be "password" or "key"')
+    if (session.authType !== 'password' && session.authType !== 'key' && session.authType !== 'serial') {
+      throw new Error('authType must be "password", "key", or "serial"')
     }
 
     const sessions = load()
     const id = session.id || randomUUID()
     const idx = sessions.findIndex(s => s.id === id)
 
+    const fallbackName = session.authType === 'serial'
+      ? (session.serialPort || 'Serial')
+      : `${session.username}@${session.host}`
+
     const record: SavedSession = {
       id,
-      name: String(session.name || '').trim() || `${session.username}@${session.host}`,
-      host: session.host.trim(),
-      port,
-      username: session.username.trim(),
+      name: String(session.name || '').trim() || fallbackName,
+      host: String(session.host || '').trim(),
+      port: isNaN(port) ? 0 : port,
+      username: String(session.username || '').trim(),
       authType: session.authType,
       keyPath: session.keyPath ?? (sessions[idx]?.keyPath ?? ''),
+      serialPort: session.serialPort ?? (sessions[idx]?.serialPort ?? ''),
+      baudRate: session.baudRate ?? (sessions[idx]?.baudRate ?? 9600),
+      dataBits: session.dataBits ?? (sessions[idx]?.dataBits ?? 8),
+      parity: session.parity ?? (sessions[idx]?.parity ?? 'none'),
+      stopBits: session.stopBits ?? (sessions[idx]?.stopBits ?? 1),
       encryptedPassword: session.password ? encrypt(session.password) : (sessions[idx]?.encryptedPassword ?? ''),
       encryptedPrivateKey: session.privateKey ? encrypt(session.privateKey) : (sessions[idx]?.encryptedPrivateKey ?? ''),
       passphrase: session.passphrase ? encrypt(session.passphrase) : (sessions[idx]?.passphrase ?? ''),
@@ -174,6 +196,11 @@ export function registerCredentialHandlers(): void {
         username: s.username,
         authType: s.authType,
         keyPath: s.keyPath || '',
+        serialPort: '',
+        baudRate: 9600,
+        dataBits: 8,
+        parity: 'none',
+        stopBits: 1,
         encryptedPassword: '',
         encryptedPrivateKey: '',
         passphrase: '',
