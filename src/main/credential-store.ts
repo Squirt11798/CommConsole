@@ -25,6 +25,7 @@ export interface SavedSession {
   dataBits: number            // 5 | 6 | 7 | 8
   parity: string              // none | odd | even
   stopBits: number            // 1 | 2
+  color: string               // tag color (hex) for sidebar/tab; '' = none
   // stored encrypted (base64) or empty string
   encryptedPassword: string
   encryptedPrivateKey: string
@@ -92,6 +93,7 @@ export function registerCredentialHandlers(): void {
     dataBits?: number
     parity?: string
     stopBits?: number
+    color?: string
     password?: string
     privateKey?: string
     passphrase?: string
@@ -135,6 +137,7 @@ export function registerCredentialHandlers(): void {
       dataBits: session.dataBits ?? (sessions[idx]?.dataBits ?? 8),
       parity: session.parity ?? (sessions[idx]?.parity ?? 'none'),
       stopBits: session.stopBits ?? (sessions[idx]?.stopBits ?? 1),
+      color: session.color ?? (sessions[idx]?.color ?? ''),
       encryptedPassword: session.password ? encrypt(session.password) : (sessions[idx]?.encryptedPassword ?? ''),
       encryptedPrivateKey: session.privateKey ? encrypt(session.privateKey) : (sessions[idx]?.encryptedPrivateKey ?? ''),
       passphrase: session.passphrase ? encrypt(session.passphrase) : (sessions[idx]?.passphrase ?? ''),
@@ -201,6 +204,7 @@ export function registerCredentialHandlers(): void {
         dataBits: 8,
         parity: 'none',
         stopBits: 1,
+        color: '',
         encryptedPassword: '',
         encryptedPrivateKey: '',
         passphrase: '',

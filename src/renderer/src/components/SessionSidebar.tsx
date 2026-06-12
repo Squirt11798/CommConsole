@@ -196,7 +196,8 @@ export default function SessionSidebar({
                   {!collapsedGroups.has(group) && (sessionsByGroup[group] ?? []).map(s => (
                     <div
                       key={s.id}
-                      className={`session-item ${dragSessionId === s.id ? 'dragging' : ''}`}
+                      className={`session-item ${dragSessionId === s.id ? 'dragging' : ''} ${s.color ? 'tagged' : ''}`}
+                      style={s.color ? { borderLeftColor: s.color } : undefined}
                       draggable
                       onDragStart={e => {
                         e.dataTransfer.setData('sessionId', s.id)

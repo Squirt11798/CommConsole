@@ -3,6 +3,18 @@ import type { SavedSession } from '../App'
 
 const BAUD_RATES = [300, 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600]
 
+// Preset tag colors — a labeled set so prod/staging/dev are visually distinct.
+const TAG_COLORS: Array<{ value: string; label: string }> = [
+  { value: '',        label: 'None' },
+  { value: '#cf5a3c', label: 'Red — Production' },
+  { value: '#c9a227', label: 'Amber — Staging' },
+  { value: '#8bbf3f', label: 'Green — Dev / Safe' },
+  { value: '#5f86a8', label: 'Steel — Internal' },
+  { value: '#5fae9e', label: 'Teal — Lab' },
+  { value: '#a86f9e', label: 'Violet — Special' },
+  { value: '#b9a44a', label: 'Brass — Default' }
+]
+
 interface ConnectOpts {
   sessionId?: string
   host: string
@@ -17,6 +29,7 @@ interface ConnectOpts {
   dataBits?: number
   parity?: string
   stopBits?: number
+  color?: string
   label: string
 }
 
@@ -39,6 +52,7 @@ export default function ConnectModal({ prefill, defaultGroup, groups, onConnect,
   const [keyPath, setKeyPath] = useState(prefill?.keyPath ?? '')
   const [passphrase, setPassphrase] = useState('')
   const [group, setGroup] = useState(prefill?.group ?? defaultGroup ?? '')
+  const [color, setColor] = useState(prefill?.color ?? '')
   const [connecting, setConnecting] = useState(false)
   // Serial-specific state
   const [serialPort, setSerialPort] = useState(prefill?.serialPort ?? '')
@@ -93,6 +107,7 @@ export default function ConnectModal({ prefill, defaultGroup, groups, onConnect,
     dataBits: isSerial ? parseInt(dataBits) : undefined,
     parity: isSerial ? parity : undefined,
     stopBits: isSerial ? parseInt(stopBits) : undefined,
+    color,
     group
   })
 
@@ -116,6 +131,7 @@ export default function ConnectModal({ prefill, defaultGroup, groups, onConnect,
         dataBits: isSerial ? parseInt(dataBits) : undefined,
         parity: isSerial ? parity : undefined,
         stopBits: isSerial ? parseInt(stopBits) : undefined,
+        color,
         label: name || (isSerial ? (serialPort || 'Serial') : `${username}@${host}`)
       })
       // Success path: App.tsx closes the modal, component unmounts
@@ -151,6 +167,24 @@ export default function ConnectModal({ prefill, defaultGroup, groups, onConnect,
                 <option key={g} value={g}>{g}</option>
               ))}
             </select>
+          </div>
+
+          <div className="form-row">
+            <label>Tag Color</label>
+            <div className="color-swatches">
+              {TAG_COLORS.map(c => (
+                <button
+                  key={c.value || 'none'}
+                  type="button"
+                  className={`color-swatch ${color === c.value ? 'selected' : ''} ${c.value ? '' : 'none'}`}
+                  style={c.value ? { background: c.value } : undefined}
+                  title={c.label}
+                  onClick={() => setColor(c.value)}
+                >
+                  {c.value ? '' : '∅'}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="form-row">

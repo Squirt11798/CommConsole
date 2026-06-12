@@ -12,6 +12,7 @@ export interface Tab {
   label: string
   host: string
   connType: 'ssh' | 'serial'
+  color: string   // tag color (hex); '' = none
 }
 
 export interface SavedSession {
@@ -27,6 +28,7 @@ export interface SavedSession {
   dataBits: number
   parity: string
   stopBits: number
+  color: string         // tag color (hex); '' = none
   group: string
   createdAt: string
 }
@@ -93,6 +95,7 @@ export default function App() {
     dataBits?: number
     parity?: string
     stopBits?: number
+    color?: string
     label: string
   }): Promise<void> => {
     try {
@@ -118,7 +121,7 @@ export default function App() {
         tabHost = opts.host
       }
 
-      const tab: Tab = { id, label: opts.label, host: tabHost, connType }
+      const tab: Tab = { id, label: opts.label, host: tabHost, connType, color: opts.color ?? '' }
       setTabs(prev => [...prev, tab])
       setActiveTab(id)
       setShowConnect(false)
@@ -210,9 +213,11 @@ export default function App() {
               {tabs.map(tab => (
                 <div
                   key={tab.id}
-                  className={`tab ${tab.id === activeTab ? 'active' : ''}`}
+                  className={`tab ${tab.id === activeTab ? 'active' : ''} ${tab.color ? 'tagged' : ''}`}
+                  style={tab.color ? { ['--tag' as string]: tab.color } : undefined}
                   onClick={() => setActiveTab(tab.id)}
                 >
+                  {tab.color && <span className="tab-color-dot" style={{ background: tab.color }} />}
                   <span className="tab-label">{tab.label}</span>
                   <button
                     className="tab-close"
