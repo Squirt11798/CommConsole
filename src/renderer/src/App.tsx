@@ -9,6 +9,7 @@ import SshPromptModal from './components/SshPromptModal'
 import TunnelManager from './components/TunnelManager'
 import SettingsModal from './components/SettingsModal'
 import type { AppSettings } from './components/SettingsModal'
+import LockScreen from './components/LockScreen'
 
 export interface Tab {
   id: string
@@ -61,6 +62,8 @@ export default function App() {
     fontSize: 14,
     defaultGroup: ''
   })
+  const [locked, setLocked] = useState(false)
+  const [totpEnabled, setTotpEnabled] = useState(false)
   const [sshPrompt, setSshPrompt] = useState<SshPromptData | null>(null)
   const [connectPrefill, setConnectPrefill] = useState<SavedSession | null>(null)
   const [connectDefaultGroup, setConnectDefaultGroup] = useState<string | undefined>()
@@ -80,6 +83,19 @@ export default function App() {
   // Load persisted settings once on startup
   useEffect(() => {
     window.api.settings.get().then(s => setSettings(s as AppSettings)).catch(() => {})
+  }, [])
+
+  // Lock status on startup + subscribe to idle/forced locks
+  useEffect(() => {
+    window.api.lock.status().then(st => {
+      setTotpEnabled(st.totpEnabled)
+      if (st.enabled && st.locked) setLocked(true)
+    }).catch(() => {})
+    const unsub = window.api.lock.onLocked(() => {
+      window.api.lock.status().then(st => setTotpEnabled(st.totpEnabled)).catch(() => {})
+      setLocked(true)
+    })
+    return unsub
   }, [])
 
   // Apply the active theme to the document root whenever it changes
@@ -201,6 +217,10 @@ export default function App() {
   const activeTabData = tabs.find(t => t.id === activeTab)
   const isConnected = tabs.length > 0 && activeTab !== null
   const isSerialTab = activeTabData?.connType === 'serial'
+
+  if (locked) {
+    return <LockScreen totpEnabled={totpEnabled} onUnlocked={() => { setLocked(false); loadSessions() }} />
+  }
 
   return (
     <div className="app">

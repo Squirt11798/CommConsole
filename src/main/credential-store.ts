@@ -61,17 +61,74 @@ function save(sessions: SavedSession[]): void {
   writeFileSync(storePath(), JSON.stringify(sessions, null, 2), 'utf-8')
 }
 
+// ── Optional master-password layer ──────────────────────────────────────────
+// When a master password is enabled, each secret is wrapped a second time with
+// AES-256-GCM under a key derived from the master password, on top of DPAPI.
+// Double-wrapped values are prefixed "m1:". The master key lives in memory only
+// after the app is unlocked.
+let masterKey: Buffer | null = null
+let masterEnabled = false
+
+export function setMasterKey(key: Buffer | null): void { masterKey = key }
+export function setMasterEnabled(on: boolean): void { masterEnabled = on }
+export function isMasterUnlocked(): boolean { return masterKey !== null }
+
+function aesWrap(buf: Buffer): string {
+  const iv = randomBytes(12)
+  const c = createCipheriv('aes-256-gcm', masterKey!, iv)
+  const enc = Buffer.concat([c.update(buf), c.final()])
+  return 'm1:' + Buffer.concat([iv, c.getAuthTag(), enc]).toString('base64')
+}
+
+function aesUnwrap(stored: string): Buffer {
+  const raw = Buffer.from(stored.slice(3), 'base64')
+  const iv = raw.subarray(0, 12), tag = raw.subarray(12, 28), enc = raw.subarray(28)
+  const d = createDecipheriv('aes-256-gcm', masterKey!, iv)
+  d.setAuthTag(tag)
+  return Buffer.concat([d.update(enc), d.final()])
+}
+
 function encrypt(plain: string): string {
   if (!plain) return ''
   if (!safeStorage.isEncryptionAvailable()) {
     throw new Error('safeStorage encryption unavailable — cannot store credentials')
   }
-  return safeStorage.encryptString(plain).toString('base64')
+  const dpapi = safeStorage.encryptString(plain)
+  if (masterEnabled && masterKey) return aesWrap(dpapi)
+  return dpapi.toString('base64')
 }
 
 function decrypt(cipher: string): string {
   if (!cipher) return ''
+  if (cipher.startsWith('m1:')) {
+    if (!masterKey) throw new Error('Vault is locked')
+    return safeStorage.decryptString(aesUnwrap(cipher))
+  }
   return safeStorage.decryptString(Buffer.from(cipher, 'base64'))
+}
+
+/**
+ * Add or remove the master-password wrap on every stored secret without ever
+ * decrypting to plaintext — we just add/strip the AES layer over the DPAPI blob.
+ * Requires masterKey to be set. Called when enabling/disabling the master password.
+ */
+export function rewrapVault(enable: boolean): void {
+  if (!masterKey) throw new Error('Master key not set')
+  const sessions = load()
+  const fields: Array<'encryptedPassword' | 'encryptedPrivateKey' | 'passphrase'> =
+    ['encryptedPassword', 'encryptedPrivateKey', 'passphrase']
+  for (const s of sessions) {
+    for (const f of fields) {
+      const val = s[f]
+      if (!val) continue
+      if (enable && !val.startsWith('m1:')) {
+        s[f] = aesWrap(Buffer.from(val, 'base64'))
+      } else if (!enable && val.startsWith('m1:')) {
+        s[f] = aesUnwrap(val).toString('base64')
+      }
+    }
+  }
+  save(sessions)
 }
 
 // ── Passphrase-based backup crypto (portable across machines) ───────────────

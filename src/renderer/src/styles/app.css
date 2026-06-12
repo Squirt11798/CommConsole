@@ -434,6 +434,31 @@ body { font-family: system-ui, sans-serif; font-size: 13px; color: var(--text); 
 }
 .backup-btns button:hover { background: var(--accent-dim); }
 .backup-msg { color: var(--success); font-size: 12px; margin-top: 4px; }
+.lock-enabled-row { display: flex; align-items: center; gap: 8px; }
+.lock-on { color: var(--success); font-size: 12px; font-weight: 600; flex: 1; }
+.lock-enabled-row button { padding: 5px 10px; background: var(--bg-3); border: none; color: var(--text); border-radius: 3px; cursor: pointer; font-size: 11px; }
+.lock-enabled-row button.danger:hover { background: var(--danger); color: #fff; }
+.totp-secret { display: block; font-family: monospace; font-size: 14px; letter-spacing: 1px; background: var(--bg-3); padding: 8px; border-radius: 4px; margin: 4px 0; word-break: break-all; color: var(--accent); }
+
+/* Lock screen */
+.lock-screen {
+  position: fixed; inset: 0; z-index: 9999;
+  background: var(--bg-0); display: flex; align-items: center; justify-content: center;
+}
+.lock-card {
+  display: flex; flex-direction: column; gap: 10px; align-items: stretch;
+  width: 320px; padding: 28px; background: var(--bg-1);
+  border: 1px solid var(--border); border-radius: 10px; text-align: center;
+}
+.lock-logo { font-size: 40px; }
+.lock-card h2 { font-size: 18px; letter-spacing: 1px; }
+.lock-sub { color: var(--text-dim); font-size: 12px; margin-bottom: 6px; }
+.lock-card input {
+  padding: 9px 12px; background: var(--bg-0); border: 1px solid var(--border);
+  border-radius: 5px; color: var(--text); font-size: 14px; text-align: center;
+}
+.lock-card input:focus { border-color: var(--accent); outline: none; }
+.lock-error { color: var(--danger); font-size: 12px; }
 
 /* SSH Tunnels */
 .tunnel-modal { width: 600px; max-width: 92vw; }

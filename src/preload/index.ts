@@ -31,6 +31,30 @@ const api = {
     forget: (entry: string) => ipcRenderer.invoke('hosts:forget', entry)
   },
 
+  lock: {
+    status: (): Promise<{ enabled: boolean; locked: boolean; totpEnabled: boolean; idleMinutes: number }> =>
+      ipcRenderer.invoke('lock:status'),
+    unlock: (passphrase: string, totp?: string): Promise<{ ok: boolean; error?: string }> =>
+      ipcRenderer.invoke('lock:unlock', { passphrase, totp }),
+    enable: (passphrase: string, idleMinutes: number): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('lock:enable', { passphrase, idleMinutes }),
+    disable: (passphrase: string): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('lock:disable', { passphrase }),
+    lock: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('lock:lock'),
+    setIdle: (minutes: number): Promise<{ idleMinutes: number }> =>
+      ipcRenderer.invoke('lock:setIdle', minutes),
+    totpBegin: (): Promise<{ secret: string; uri: string }> => ipcRenderer.invoke('lock:totpBegin'),
+    totpEnable: (secret: string, code: string): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('lock:totpEnable', { secret, code }),
+    totpDisable: (passphrase: string): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('lock:totpDisable', { passphrase }),
+    onLocked: (cb: () => void) => {
+      const handler = (): void => cb()
+      ipcRenderer.on('lock:locked', handler)
+      return () => ipcRenderer.off('lock:locked', handler)
+    }
+  },
+
   groups: {
     list: (): Promise<string[]> => ipcRenderer.invoke('groups:list'),
     create: (name: string) => ipcRenderer.invoke('groups:create', name),

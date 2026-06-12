@@ -40,16 +40,31 @@ export default function SettingsModal({ settings, groups, onApply, onSessionsCha
   const [backupMsg, setBackupMsg] = useState('')
   const [backupErr, setBackupErr] = useState('')
 
+  // App-lock state
+  const [lock, setLock] = useState<{ enabled: boolean; totpEnabled: boolean; idleMinutes: number }>({ enabled: false, totpEnabled: false, idleMinutes: 0 })
+  const [lockMode, setLockMode] = useState<'idle' | 'enable' | 'disable'>('idle')
+  const [mp, setMp] = useState('')
+  const [lockErr, setLockErr] = useState('')
+  const [lockMsg, setLockMsg] = useState('')
+  // TOTP enrollment
+  const [totpEnroll, setTotpEnroll] = useState<{ secret: string; uri: string } | null>(null)
+  const [totpCode, setTotpCode] = useState('')
+
   const loadHosts = useCallback(() => {
     window.api.hosts.list().then(setHosts).catch(() => {})
+  }, [])
+
+  const loadLock = useCallback(() => {
+    window.api.lock.status().then(st => setLock({ enabled: st.enabled, totpEnabled: st.totpEnabled, idleMinutes: st.idleMinutes })).catch(() => {})
   }, [])
 
   useEffect(() => {
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', esc)
     loadHosts()
+    loadLock()
     return () => window.removeEventListener('keydown', esc)
-  }, [onClose, loadHosts])
+  }, [onClose, loadHosts, loadLock])
 
   // Live-preview each change immediately
   const patch = (p: Partial<AppSettings>) => {
@@ -85,6 +100,52 @@ export default function SettingsModal({ settings, groups, onApply, onSessionsCha
     } catch (err) {
       setBackupErr(err instanceof Error ? err.message : String(err))
     }
+  }
+
+  const enableMaster = async () => {
+    setLockErr(''); setLockMsg('')
+    if (mp.length < 6) { setLockErr('Master password must be at least 6 characters.'); return }
+    try {
+      await window.api.lock.enable(mp, lock.idleMinutes || 0)
+      setMp(''); setLockMode('idle'); setLockMsg('Master password enabled.')
+      loadLock()
+    } catch (err) { setLockErr(err instanceof Error ? err.message : String(err)) }
+  }
+
+  const disableMaster = async () => {
+    setLockErr(''); setLockMsg('')
+    try {
+      await window.api.lock.disable(mp)
+      setMp(''); setLockMode('idle'); setLockMsg('Master password disabled.')
+      loadLock()
+    } catch (err) { setLockErr(err instanceof Error ? err.message : String(err)) }
+  }
+
+  const saveIdle = async (minutes: number) => {
+    try { await window.api.lock.setIdle(minutes); setLock({ ...lock, idleMinutes: minutes }) } catch { /* ignore */ }
+  }
+
+  const beginTotp = async () => {
+    setLockErr('')
+    try { setTotpEnroll(await window.api.lock.totpBegin()) }
+    catch (err) { setLockErr(err instanceof Error ? err.message : String(err)) }
+  }
+
+  const confirmTotp = async () => {
+    if (!totpEnroll) return
+    setLockErr('')
+    try {
+      await window.api.lock.totpEnable(totpEnroll.secret, totpCode)
+      setTotpEnroll(null); setTotpCode(''); setLockMsg('Authenticator enabled.')
+      loadLock()
+    } catch (err) { setLockErr(err instanceof Error ? err.message : String(err)) }
+  }
+
+  const disableTotp = async () => {
+    setLockErr('')
+    if (!mp) { setLockErr('Enter your master password above to disable the authenticator.'); return }
+    try { await window.api.lock.totpDisable(mp); setMp(''); setLockMsg('Authenticator disabled.'); loadLock() }
+    catch (err) { setLockErr(err instanceof Error ? err.message : String(err)) }
   }
 
   return (
@@ -197,6 +258,86 @@ export default function SettingsModal({ settings, groups, onApply, onSessionsCha
             )}
             {backupMsg && <div className="backup-msg">{backupMsg}</div>}
             {backupErr && <div className="tunnel-err">{backupErr}</div>}
+          </div>
+
+          <div className="form-row">
+            <label>Master Password / App Lock</label>
+            <p className="settings-preview-note">
+              Adds a second encryption layer over the vault and requires a password to open the app.
+            </p>
+            {!lock.enabled && lockMode !== 'enable' && (
+              <div className="backup-btns">
+                <button onClick={() => { setLockErr(''); setLockMsg(''); setLockMode('enable') }}>Set Master Password…</button>
+              </div>
+            )}
+            {!lock.enabled && lockMode === 'enable' && (
+              <div className="backup-form">
+                <input type="password" autoFocus placeholder="New master password (min 6 chars)" value={mp}
+                  onChange={e => setMp(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') enableMaster() }} />
+                <button className="btn-primary" onClick={enableMaster}>Enable</button>
+                <button onClick={() => { setLockMode('idle'); setMp('') }}>Cancel</button>
+              </div>
+            )}
+
+            {lock.enabled && (
+              <>
+                <div className="lock-enabled-row">
+                  <span className="lock-on">● Enabled</span>
+                  <button onClick={() => window.api.lock.lock()}>Lock Now</button>
+                  {lockMode !== 'disable'
+                    ? <button className="danger" onClick={() => { setLockErr(''); setLockMsg(''); setLockMode('disable') }}>Remove…</button>
+                    : null}
+                </div>
+
+                <div className="form-row" style={{ marginTop: 8 }}>
+                  <label>Auto-lock after idle</label>
+                  <select className="form-select" value={String(lock.idleMinutes)} onChange={e => saveIdle(parseInt(e.target.value, 10))}>
+                    <option value="0">Never</option>
+                    <option value="1">1 minute</option>
+                    <option value="5">5 minutes</option>
+                    <option value="15">15 minutes</option>
+                    <option value="30">30 minutes</option>
+                    <option value="60">60 minutes</option>
+                  </select>
+                </div>
+
+                <div className="form-row" style={{ marginTop: 8 }}>
+                  <label>Authenticator (TOTP) {lock.totpEnabled ? '— enabled' : ''}</label>
+                  {!lock.totpEnabled && !totpEnroll && (
+                    <div className="backup-btns"><button onClick={beginTotp}>Set Up Authenticator…</button></div>
+                  )}
+                  {!lock.totpEnabled && totpEnroll && (
+                    <div className="totp-enroll">
+                      <p className="settings-preview-note">Add this secret to your authenticator app, then enter the 6-digit code:</p>
+                      <code className="totp-secret">{totpEnroll.secret}</code>
+                      <div className="backup-form">
+                        <input type="text" inputMode="numeric" maxLength={6} placeholder="123456" value={totpCode}
+                          onChange={e => setTotpCode(e.target.value.replace(/\D/g, ''))} onKeyDown={e => { if (e.key === 'Enter') confirmTotp() }} />
+                        <button className="btn-primary" onClick={confirmTotp}>Verify & Enable</button>
+                        <button onClick={() => { setTotpEnroll(null); setTotpCode('') }}>Cancel</button>
+                      </div>
+                    </div>
+                  )}
+                  {lock.totpEnabled && (
+                    <div className="backup-form">
+                      <input type="password" placeholder="Master password to disable" value={mp} onChange={e => setMp(e.target.value)} />
+                      <button className="danger" onClick={disableTotp}>Disable Authenticator</button>
+                    </div>
+                  )}
+                </div>
+
+                {lockMode === 'disable' && (
+                  <div className="backup-form" style={{ marginTop: 8 }}>
+                    <input type="password" autoFocus placeholder="Master password to remove lock" value={mp}
+                      onChange={e => setMp(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') disableMaster() }} />
+                    <button className="danger" onClick={disableMaster}>Remove Lock</button>
+                    <button onClick={() => { setLockMode('idle'); setMp('') }}>Cancel</button>
+                  </div>
+                )}
+              </>
+            )}
+            {lockMsg && <div className="backup-msg">{lockMsg}</div>}
+            {lockErr && <div className="tunnel-err">{lockErr}</div>}
           </div>
           </>
          )}
