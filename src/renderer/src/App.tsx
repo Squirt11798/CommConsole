@@ -6,6 +6,7 @@ import ConnectModal from './components/ConnectModal'
 import ResourceMonitor from './components/ResourceMonitor'
 import ImportMobaModal from './components/ImportMobaModal'
 import SshPromptModal from './components/SshPromptModal'
+import TunnelManager from './components/TunnelManager'
 
 export interface Tab {
   id: string
@@ -50,6 +51,7 @@ export default function App() {
   const [groups, setGroups] = useState<string[]>([])
   const [showConnect, setShowConnect] = useState(false)
   const [showImport, setShowImport] = useState(false)
+  const [showTunnels, setShowTunnels] = useState(false)
   const [sshPrompt, setSshPrompt] = useState<SshPromptData | null>(null)
   const [connectPrefill, setConnectPrefill] = useState<SavedSession | null>(null)
   const [connectDefaultGroup, setConnectDefaultGroup] = useState<string | undefined>()
@@ -203,6 +205,7 @@ export default function App() {
           onRenameGroup={renameGroup}
           onDeleteGroup={deleteGroup}
           onImportMoba={() => setShowImport(true)}
+          onShowTunnels={() => setShowTunnels(true)}
         />
 
         {/* Main area */}
@@ -285,6 +288,8 @@ export default function App() {
           onClose={() => setShowImport(false)}
         />
       )}
+
+      {showTunnels && <TunnelManager onClose={() => setShowTunnels(false)} />}
 
       {sshPrompt && (
         <SshPromptModal

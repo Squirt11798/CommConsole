@@ -63,6 +63,21 @@ const api = {
     disconnect: (connId: string) => ipcRenderer.invoke('serial:disconnect', connId)
   },
 
+  tunnels: {
+    list: (): Promise<unknown[]> => ipcRenderer.invoke('tunnels:list'),
+    listSessions: (): Promise<Array<{ id: string; name: string; host: string }>> =>
+      ipcRenderer.invoke('tunnels:listSessions'),
+    save: (cfg: object): Promise<string> => ipcRenderer.invoke('tunnels:save', cfg),
+    delete: (id: string) => ipcRenderer.invoke('tunnels:delete', id),
+    start: (id: string) => ipcRenderer.invoke('tunnels:start', id),
+    stop: (id: string) => ipcRenderer.invoke('tunnels:stop', id),
+    onStatus: (cb: (id: string, state: string, error: string) => void) => {
+      const handler = (_e: Electron.IpcRendererEvent, id: string, state: string, error: string) => cb(id, state, error)
+      ipcRenderer.on('tunnels:status', handler)
+      return () => ipcRenderer.off('tunnels:status', handler)
+    }
+  },
+
   sftp: {
     list: (connId: string, path: string) => ipcRenderer.invoke('sftp:list', connId, path),
     download: (connId: string, remotePath: string, localPath: string) =>

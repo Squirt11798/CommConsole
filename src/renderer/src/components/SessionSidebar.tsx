@@ -14,6 +14,7 @@ interface Props {
   onRenameGroup: (oldName: string, newName: string) => void
   onDeleteGroup: (name: string) => void
   onImportMoba: () => void
+  onShowTunnels: () => void
 }
 
 type ContextTarget =
@@ -30,7 +31,7 @@ interface ContextMenu {
 export default function SessionSidebar({
   sessions, groups, collapsed, onToggleCollapse,
   onNewConnection, onOpenSession, onDeleteSession,
-  onMoveSession, onCreateGroup, onRenameGroup, onDeleteGroup, onImportMoba
+  onMoveSession, onCreateGroup, onRenameGroup, onDeleteGroup, onImportMoba, onShowTunnels
 }: Props) {
   const [filter, setFilter] = useState('')
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null)
@@ -123,6 +124,11 @@ export default function SessionSidebar({
       >
         <div className="sidebar-header">
           {!collapsed && <span className="sidebar-title">Sessions</span>}
+          {!collapsed && (
+            <button className="sidebar-import-btn" onClick={onShowTunnels} title="SSH Tunnels">
+              🔀
+            </button>
+          )}
           {!collapsed && (
             <button className="sidebar-import-btn" onClick={onImportMoba} title="Import from MobaXterm">
               📥

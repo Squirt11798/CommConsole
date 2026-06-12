@@ -3,6 +3,7 @@ import { join } from 'path'
 import { registerSshHandlers } from './ssh-manager'
 import { registerSerialHandlers } from './serial-manager'
 import { registerCredentialHandlers } from './credential-store'
+import { registerTunnelHandlers, shutdownTunnels } from './tunnel-manager'
 import { is } from '@electron-toolkit/utils'
 
 let mainWindow: BrowserWindow | null = null
@@ -112,10 +113,15 @@ app.whenReady().then(() => {
   registerSshHandlers(mainWindow!)
   registerSerialHandlers(mainWindow!)
   registerCredentialHandlers()
+  registerTunnelHandlers(mainWindow!)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
+})
+
+app.on('before-quit', () => {
+  shutdownTunnels()
 })
 
 app.on('window-all-closed', () => {

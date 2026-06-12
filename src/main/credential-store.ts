@@ -230,3 +230,41 @@ export function getDecryptedCredentials(id: string): { password: string; private
     passphrase: decrypt(session.passphrase)
   }
 }
+
+/**
+ * Full connection info for a saved SSH session — non-secret fields plus
+ * decrypted credentials. Used by the tunnel manager so tunnels can reuse a
+ * session's stored credentials. Returns null for missing or serial sessions.
+ */
+export function getSessionForConnect(id: string): {
+  name: string
+  host: string
+  port: number
+  username: string
+  authType: 'password' | 'key'
+  keyPath: string
+  password: string
+  privateKey: string
+  passphrase: string
+} | null {
+  const s = load().find(x => x.id === id)
+  if (!s || s.authType === 'serial') return null
+  return {
+    name: s.name,
+    host: s.host,
+    port: s.port,
+    username: s.username,
+    authType: s.authType,
+    keyPath: s.keyPath || '',
+    password: decrypt(s.encryptedPassword),
+    privateKey: decrypt(s.encryptedPrivateKey),
+    passphrase: decrypt(s.passphrase)
+  }
+}
+
+/** Lightweight list of SSH (non-serial) sessions for tunnel target pickers. */
+export function listSshSessions(): Array<{ id: string; name: string; host: string }> {
+  return load()
+    .filter(s => s.authType !== 'serial')
+    .map(s => ({ id: s.id, name: s.name, host: s.host }))
+}
