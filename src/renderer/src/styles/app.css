@@ -1,17 +1,19 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg-0: #0d0d1a;
-  --bg-1: #13132a;
-  --bg-2: #1a1a35;
-  --bg-3: #22224a;
-  --accent: #7c7cff;
-  --accent-dim: #4a4aaa;
-  --text: #d0d0e8;
-  --text-dim: #7878a0;
-  --danger: #ff6b6b;
-  --success: #6bff9e;
-  --border: #2a2a50;
+  /* Military / tactical palette — dark olive field base, brass-amber accent */
+  --bg-0: #0e120b;   /* near-black olive */
+  --bg-1: #161c10;
+  --bg-2: #1e2616;
+  --bg-3: #29331d;
+  --accent: #b9a44a;     /* brass / amber gold */
+  --accent-dim: #6f6428;
+  --text: #d6d8c2;       /* light khaki */
+  --text-dim: #868c6e;   /* faded olive */
+  --danger: #cf5a3c;     /* signal orange-red */
+  --success: #8bbf3f;    /* OD green */
+  --border: #353f23;
+  --on-accent: #14180d;  /* dark text for use on amber buttons */
   --tab-h: 36px;
   --titlebar-h: 32px;
   --sidebar-w: 220px;
@@ -84,11 +86,11 @@ body { font-family: system-ui, sans-serif; font-size: 13px; color: var(--text); 
   margin: 8px;
   padding: 7px 12px;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border: none; border-radius: 5px;
   cursor: pointer; font-size: 12px; font-weight: 600;
 }
-.btn-new-connection:hover { background: #9090ff; }
+.btn-new-connection:hover { background: #d4bc5a; }
 
 .sidebar-search {
   margin: 4px 8px 8px;
@@ -124,7 +126,7 @@ body { font-family: system-ui, sans-serif; font-size: 13px; color: var(--text); 
 .session-item[draggable]:active { cursor: grabbing; }
 .session-group-label.drop-active {
   background: var(--accent-dim);
-  color: #fff;
+  color: var(--text);
   border-radius: 3px;
 }
 
@@ -223,7 +225,7 @@ body { font-family: system-ui, sans-serif; font-size: 13px; color: var(--text); 
   padding: 2px 7px; border-radius: 3px; cursor: pointer; font-size: 12px;
 }
 .sftp-mkdir-row button:hover { background: var(--accent-dim); }
-.sftp-error { padding: 6px 10px; background: #3a1a1a; color: var(--danger); font-size: 11px; }
+.sftp-error { padding: 6px 10px; background: #2e1a12; color: var(--danger); font-size: 11px; }
 .sftp-loading { padding: 16px; color: var(--text-dim); text-align: center; }
 .sftp-list { flex: 1; overflow-y: auto; }
 .sftp-header-row {
@@ -239,11 +241,11 @@ body { font-family: system-ui, sans-serif; font-size: 13px; color: var(--text); 
   display: grid;
   grid-template-columns: 1fr 70px 120px 80px;
   padding: 4px 8px; align-items: center;
-  cursor: pointer; border-bottom: 1px solid #1a1a30;
+  cursor: pointer; border-bottom: 1px solid var(--bg-2);
 }
 .sftp-row:hover { background: var(--bg-3); }
-.sftp-row.selected { background: #22224a; }
-.sftp-row.is-dir .col-name { color: #9eaeff; font-weight: 500; }
+.sftp-row.selected { background: var(--bg-3); }
+.sftp-row.is-dir .col-name { color: #c9b85f; font-weight: 500; }
 .col-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 4px; }
 .col-name input { flex: 1; background: var(--bg-0); border: 1px solid var(--accent); color: var(--text); padding: 1px 4px; border-radius: 3px; }
 .col-size, .col-date { color: var(--text-dim); font-size: 11px; }
@@ -268,11 +270,11 @@ body { font-family: system-ui, sans-serif; font-size: 13px; color: var(--text); 
 /* ── Buttons ── */
 .btn-primary {
   padding: 8px 18px;
-  background: var(--accent); color: #fff;
+  background: var(--accent); color: var(--on-accent);
   border: none; border-radius: 5px; cursor: pointer;
   font-size: 13px; font-weight: 600;
 }
-.btn-primary:hover { background: #9090ff; }
+.btn-primary:hover { background: #d4bc5a; }
 .btn-primary:disabled { opacity: 0.5; cursor: default; }
 .btn-secondary {
   padding: 8px 18px;
@@ -458,8 +460,8 @@ body { font-family: system-ui, sans-serif; font-size: 13px; color: var(--text); 
 }
 .rm-item.narrow { gap: 4px; }
 .rm-icon { font-size: 12px; flex-shrink: 0; }
-.rm-icon.net-down { color: #6bff9e; font-size: 13px; font-weight: bold; }
-.rm-icon.net-up   { color: #ff9e6b; font-size: 13px; font-weight: bold; }
+.rm-icon.net-down { color: #8bbf3f; font-size: 13px; font-weight: bold; }
+.rm-icon.net-up   { color: #d99a3f; font-size: 13px; font-weight: bold; }
 .rm-label { color: var(--text-dim); min-width: 26px; }
 .rm-value { font-family: monospace; font-size: 11px; color: var(--text); min-width: 80px; }
 .rm-item.narrow .rm-value { min-width: unset; }

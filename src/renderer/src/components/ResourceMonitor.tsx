@@ -87,9 +87,10 @@ export default function ResourceMonitor({ connId }: Props) {
   const memPct = memTotal > 0 ? Math.round((memUsed / memTotal) * 100) : 0
   const disk = stats.diskPct ?? 0
 
-  const cpuColor  = cpu  > 85 ? '#ff6b6b' : cpu  > 60 ? '#ffd93d' : '#6bff9e'
-  const memColor  = memPct > 85 ? '#ff6b6b' : memPct > 60 ? '#ffd93d' : '#7c9cff'
-  const diskColor = disk > 85 ? '#ff6b6b' : disk > 60 ? '#ffd93d' : '#c47cff'
+  // Tactical palette: signal-orange (alert) → amber (caution) → OD-green (nominal)
+  const cpuColor  = cpu  > 85 ? '#cf5a3c' : cpu  > 60 ? '#c9a227' : '#8bbf3f'
+  const memColor  = memPct > 85 ? '#cf5a3c' : memPct > 60 ? '#c9a227' : '#8bbf3f'
+  const diskColor = disk > 85 ? '#cf5a3c' : disk > 60 ? '#c9a227' : '#8bbf3f'
 
   if (error) return (
     <div className="resource-monitor error">
