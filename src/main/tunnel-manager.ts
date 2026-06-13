@@ -30,11 +30,11 @@ import { computeFingerprint, checkHost } from './known-hosts'
 export interface TunnelConfig {
   id: string
   name: string
-  type: 'local' | 'remote'
+  type: 'local' | 'remote' | 'dynamic'
   sessionId: string      // saved SSH session that provides host + credentials
-  listenHost: string     // local: local bind addr; remote: remote bind addr
+  listenHost: string     // local/dynamic: local bind addr; remote: remote bind addr
   listenPort: number
-  destHost: string
+  destHost: string       // unused for dynamic (SOCKS chooses per-request)
   destPort: number
   autoStart: boolean
 }
@@ -123,6 +123,59 @@ function buildClient(cfg: TunnelConfig): Client {
   return client
 }
 
+/**
+ * Minimal SOCKS5 server for one client socket. Supports no-auth CONNECT to
+ * IPv4 / IPv6 / domain destinations, forwarding each through the SSH client.
+ * (Greeting and request typically arrive as single TCP segments, which this
+ * handler assumes — sufficient for browsers, curl, proxychains, etc.)
+ */
+function serveSocks(socket: import('net').Socket, client: Client): void {
+  socket.once('data', (greeting: Buffer) => {
+    if (greeting.length < 2 || greeting[0] !== 0x05) { socket.end(); return }
+    // Reply: version 5, method 0x00 (no authentication)
+    socket.write(Buffer.from([0x05, 0x00]))
+
+    socket.once('data', (req: Buffer) => {
+      // VER CMD RSV ATYP DST.ADDR DST.PORT
+      if (req.length < 7 || req[0] !== 0x05 || req[1] !== 0x01) {
+        socket.end(Buffer.from([0x05, 0x07, 0x00, 0x01, 0, 0, 0, 0, 0, 0])) // command not supported
+        return
+      }
+      const atyp = req[3]
+      let host = ''
+      let offset = 4
+      if (atyp === 0x01) {            // IPv4
+        host = `${req[4]}.${req[5]}.${req[6]}.${req[7]}`
+        offset = 8
+      } else if (atyp === 0x03) {     // domain name
+        const len = req[4]
+        host = req.subarray(5, 5 + len).toString('utf-8')
+        offset = 5 + len
+      } else if (atyp === 0x04) {     // IPv6
+        const parts: string[] = []
+        for (let i = 0; i < 16; i += 2) parts.push(req.readUInt16BE(4 + i).toString(16))
+        host = parts.join(':')
+        offset = 20
+      } else {
+        socket.end(Buffer.from([0x05, 0x08, 0x00, 0x01, 0, 0, 0, 0, 0, 0])) // address type not supported
+        return
+      }
+      const port = req.readUInt16BE(offset)
+
+      client.forwardOut('127.0.0.1', 0, host, port, (err, stream) => {
+        if (err) {
+          socket.end(Buffer.from([0x05, 0x05, 0x00, 0x01, 0, 0, 0, 0, 0, 0])) // connection refused
+          return
+        }
+        // Success reply (bound address reported as 0.0.0.0:0)
+        socket.write(Buffer.from([0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]))
+        stream.on('error', () => { try { socket.end() } catch { /* ignore */ } })
+        socket.pipe(stream).pipe(socket)
+      })
+    })
+  })
+}
+
 function startTunnel(win: BrowserWindow, cfg: TunnelConfig): void {
   // Tear down any existing runtime for this id first
   stopTunnel(cfg.id)
@@ -176,6 +229,20 @@ function startTunnel(win: BrowserWindow, cfg: TunnelConfig): void {
         rt.server = server
         setState(win, cfg.id, 'active')
       })
+    } else if (cfg.type === 'dynamic') {
+      // Dynamic forward: run a local SOCKS5 proxy; forwardOut per request.
+      const server = createServer((socket) => {
+        socket.on('error', () => { /* ignore client resets */ })
+        serveSocks(socket, client)
+      })
+      server.on('error', (err) => {
+        setState(win, cfg.id, 'error', `SOCKS bind failed: ${err.message}`)
+        stopTunnel(cfg.id)
+      })
+      server.listen(cfg.listenPort, cfg.listenHost || '127.0.0.1', () => {
+        rt.server = server
+        setState(win, cfg.id, 'active')
+      })
     } else {
       // Remote forward: server binds the port, we connect out locally per stream.
       client.forwardIn(cfg.listenHost || '127.0.0.1', cfg.listenPort, (err) => {
@@ -212,23 +279,33 @@ export function registerTunnelHandlers(win: BrowserWindow): void {
 
   ipcMain.handle('tunnels:save', (_e, cfg: Partial<TunnelConfig>) => {
     if (!cfg.sessionId) throw new Error('A saved SSH session is required for the tunnel.')
-    if (cfg.type !== 'local' && cfg.type !== 'remote') throw new Error('Tunnel type must be local or remote.')
+    if (cfg.type !== 'local' && cfg.type !== 'remote' && cfg.type !== 'dynamic') {
+      throw new Error('Tunnel type must be local, remote, or dynamic.')
+    }
     const listenPort = parseInt(String(cfg.listenPort), 10)
-    const destPort = parseInt(String(cfg.destPort), 10)
     if (isNaN(listenPort) || listenPort < 1 || listenPort > 65535) throw new Error('Listen port must be 1–65535.')
-    if (isNaN(destPort) || destPort < 1 || destPort > 65535) throw new Error('Destination port must be 1–65535.')
-    if (!cfg.destHost) throw new Error('Destination host is required.')
+
+    const isDynamic = cfg.type === 'dynamic'
+    let destPort = 0
+    let destHost = ''
+    if (!isDynamic) {
+      destPort = parseInt(String(cfg.destPort), 10)
+      if (isNaN(destPort) || destPort < 1 || destPort > 65535) throw new Error('Destination port must be 1–65535.')
+      if (!cfg.destHost) throw new Error('Destination host is required.')
+      destHost = cfg.destHost.trim()
+    }
 
     const list = loadTunnels()
     const id = cfg.id || randomUUID()
     const record: TunnelConfig = {
       id,
-      name: (cfg.name || '').trim() || `${cfg.type}:${listenPort}→${cfg.destHost}:${destPort}`,
+      name: (cfg.name || '').trim() ||
+        (isDynamic ? `SOCKS:${listenPort}` : `${cfg.type}:${listenPort}→${destHost}:${destPort}`),
       type: cfg.type,
       sessionId: cfg.sessionId,
       listenHost: (cfg.listenHost || '127.0.0.1').trim(),
       listenPort,
-      destHost: cfg.destHost.trim(),
+      destHost,
       destPort,
       autoStart: !!cfg.autoStart
     }

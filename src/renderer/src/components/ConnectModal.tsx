@@ -37,12 +37,13 @@ interface Props {
   prefill: SavedSession | null
   defaultGroup?: string
   groups: string[]
+  sshSessions: Array<{ id: string; name: string; host: string }>
   onConnect: (opts: ConnectOpts) => Promise<void>
   onSave: (session: object) => Promise<string>
   onClose: () => void
 }
 
-export default function ConnectModal({ prefill, defaultGroup, groups, onConnect, onSave, onClose }: Props) {
+export default function ConnectModal({ prefill, defaultGroup, groups, sshSessions, onConnect, onSave, onClose }: Props) {
   const [name, setName] = useState(prefill?.name ?? '')
   const [host, setHost] = useState(prefill?.host ?? '')
   const [port, setPort] = useState(String(prefill?.port ?? 22))
@@ -53,6 +54,7 @@ export default function ConnectModal({ prefill, defaultGroup, groups, onConnect,
   const [passphrase, setPassphrase] = useState('')
   const [group, setGroup] = useState(prefill?.group ?? defaultGroup ?? '')
   const [color, setColor] = useState(prefill?.color ?? '')
+  const [jumpSessionId, setJumpSessionId] = useState(prefill?.jumpSessionId ?? '')
   const [connecting, setConnecting] = useState(false)
   // Serial-specific state
   const [serialPort, setSerialPort] = useState(prefill?.serialPort ?? '')
@@ -108,6 +110,7 @@ export default function ConnectModal({ prefill, defaultGroup, groups, onConnect,
     parity: isSerial ? parity : undefined,
     stopBits: isSerial ? parseInt(stopBits) : undefined,
     color,
+    jumpSessionId: isSerial ? '' : jumpSessionId,
     group
   })
 
@@ -256,6 +259,22 @@ export default function ConnectModal({ prefill, defaultGroup, groups, onConnect,
                   </div>
                 </>
               )}
+
+              <div className="form-row">
+                <label>Jump Host (ProxyJump)</label>
+                <select
+                  className="form-select"
+                  value={jumpSessionId}
+                  onChange={e => setJumpSessionId(e.target.value)}
+                >
+                  <option value="">Direct connection (no jump)</option>
+                  {sshSessions
+                    .filter(s => s.id !== prefill?.id)
+                    .map(s => (
+                      <option key={s.id} value={s.id}>{s.name} ({s.host})</option>
+                    ))}
+                </select>
+              </div>
             </>
           )}
 

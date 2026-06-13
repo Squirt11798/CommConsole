@@ -26,6 +26,7 @@ export interface SavedSession {
   parity: string              // none | odd | even
   stopBits: number            // 1 | 2
   color: string               // tag color (hex) for sidebar/tab; '' = none
+  jumpSessionId: string       // saved session to tunnel through (ProxyJump); '' = direct
   // stored encrypted (base64) or empty string
   encryptedPassword: string
   encryptedPrivateKey: string
@@ -187,6 +188,7 @@ export function registerCredentialHandlers(): void {
     parity?: string
     stopBits?: number
     color?: string
+    jumpSessionId?: string
     password?: string
     privateKey?: string
     passphrase?: string
@@ -231,6 +233,7 @@ export function registerCredentialHandlers(): void {
       parity: session.parity ?? (sessions[idx]?.parity ?? 'none'),
       stopBits: session.stopBits ?? (sessions[idx]?.stopBits ?? 1),
       color: session.color ?? (sessions[idx]?.color ?? ''),
+      jumpSessionId: session.jumpSessionId ?? (sessions[idx]?.jumpSessionId ?? ''),
       encryptedPassword: session.password ? encrypt(session.password) : (sessions[idx]?.encryptedPassword ?? ''),
       encryptedPrivateKey: session.privateKey ? encrypt(session.privateKey) : (sessions[idx]?.encryptedPrivateKey ?? ''),
       passphrase: session.passphrase ? encrypt(session.passphrase) : (sessions[idx]?.passphrase ?? ''),
@@ -298,6 +301,7 @@ export function registerCredentialHandlers(): void {
         parity: 'none',
         stopBits: 1,
         color: '',
+        jumpSessionId: '',
         encryptedPassword: '',
         encryptedPrivateKey: '',
         passphrase: '',
@@ -356,6 +360,7 @@ export function registerCredentialHandlers(): void {
         parity: String(p.parity || 'none'),
         stopBits: Number(p.stopBits || 1),
         color: String(p.color || ''),
+        jumpSessionId: String(p.jumpSessionId || ''),
         // re-encrypt secrets with the local machine's DPAPI key
         encryptedPassword: p.password ? encrypt(String(p.password)) : '',
         encryptedPrivateKey: p.privateKey ? encrypt(String(p.privateKey)) : '',
@@ -417,6 +422,12 @@ export function getSessionForConnect(id: string): {
     privateKey: decrypt(s.encryptedPrivateKey),
     passphrase: decrypt(s.passphrase)
   }
+}
+
+/** The jump-host session id configured for a session, or '' if direct. */
+export function getJumpSessionId(id: string): string {
+  const s = load().find(x => x.id === id)
+  return s?.jumpSessionId || ''
 }
 
 /** Lightweight list of SSH (non-serial) sessions for tunnel target pickers. */

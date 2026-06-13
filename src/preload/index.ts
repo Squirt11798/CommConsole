@@ -99,10 +99,15 @@ const api = {
   },
 
   settings: {
-    get: (): Promise<{ theme: string; fontFamily: string; fontSize: number; defaultGroup: string }> =>
+    get: (): Promise<{ theme: string; fontFamily: string; fontSize: number; defaultGroup: string; sessionLogging: boolean }> =>
       ipcRenderer.invoke('settings:get'),
-    set: (patch: object): Promise<{ theme: string; fontFamily: string; fontSize: number; defaultGroup: string }> =>
+    set: (patch: object): Promise<{ theme: string; fontFamily: string; fontSize: number; defaultGroup: string; sessionLogging: boolean }> =>
       ipcRenderer.invoke('settings:set', patch)
+  },
+
+  logs: {
+    open: (): Promise<string> => ipcRenderer.invoke('logs:open'),
+    dir: (): Promise<string> => ipcRenderer.invoke('logs:dir')
   },
 
   tunnels: {

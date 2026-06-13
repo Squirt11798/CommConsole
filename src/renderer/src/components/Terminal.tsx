@@ -10,6 +10,8 @@ interface Props {
   fontFamily?: string
   fontSize?: number
   theme?: string
+  broadcast?: boolean          // when true, typed input is mirrored to broadcastTargets
+  broadcastTargets?: string[]  // connIds to mirror input to (includes this one)
 }
 
 const DARK_ANSI = {
@@ -48,10 +50,16 @@ function buildTermTheme(theme?: string): Record<string, string> {
   }
 }
 
-export default function Terminal({ connId, active, fontFamily, fontSize, theme }: Props) {
+export default function Terminal({ connId, active, fontFamily, fontSize, theme, broadcast, broadcastTargets }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<XTerm | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
+  // Keep the latest broadcast state in refs so the (mount-time) onData handler
+  // reads current values without being re-created.
+  const broadcastRef = useRef<boolean>(!!broadcast)
+  const targetsRef = useRef<string[]>(broadcastTargets ?? [])
+  broadcastRef.current = !!broadcast
+  targetsRef.current = broadcastTargets ?? []
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -80,9 +88,14 @@ export default function Terminal({ connId, active, fontFamily, fontSize, theme }
       if (sel) navigator.clipboard.writeText(sel).catch(() => {})
     })
 
-    // Send keystrokes to SSH
+    // Send keystrokes to SSH. When broadcast is active, mirror input to every
+    // target connection; otherwise send only to this one.
     term.onData(data => {
-      window.api.ssh.sendData(connId, data)
+      if (broadcastRef.current && targetsRef.current.length > 0) {
+        for (const id of targetsRef.current) window.api.ssh.sendData(id, data)
+      } else {
+        window.api.ssh.sendData(connId, data)
+      }
     })
 
     // Notify main of resize

@@ -35,6 +35,7 @@ export interface SavedSession {
   parity: string
   stopBits: number
   color: string         // tag color (hex); '' = none
+  jumpSessionId: string // ProxyJump bastion session id; '' = direct
   group: string
   createdAt: string
 }
@@ -62,7 +63,8 @@ export default function App() {
     theme: 'olive',
     fontFamily: '"Cascadia Code", "Fira Code", "Consolas", monospace',
     fontSize: 14,
-    defaultGroup: ''
+    defaultGroup: '',
+    sessionLogging: false
   })
   const [locked, setLocked] = useState(false)
   const [totpEnabled, setTotpEnabled] = useState(false)
@@ -73,6 +75,8 @@ export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [rightPanel, setRightPanel] = useState<RightPanel>('none')
   const [showMonitor, setShowMonitor] = useState(true)
+  const [tiled, setTiled] = useState(false)        // split/tiled view of all open terminals
+  const [broadcast, setBroadcast] = useState(false) // mirror typed input to all terminals
 
   const loadSessions = useCallback(async () => {
     const [list, grps] = await Promise.all([
@@ -311,6 +315,22 @@ export default function App() {
               {/* Right-side toolbar icons */}
               <div className="tab-toolbar">
                 <button
+                  className={`toolbar-btn ${tiled ? 'active' : ''}`}
+                  title={tabs.length < 2 ? 'Split view needs 2+ open connections' : 'Split / tile all terminals'}
+                  onClick={() => setTiled(v => !v)}
+                  disabled={tabs.length < 2}
+                >
+                  ▦
+                </button>
+                <button
+                  className={`toolbar-btn ${broadcast ? 'active danger-active' : ''}`}
+                  title={tabs.length < 2 ? 'Broadcast needs 2+ open connections' : 'Broadcast input to all terminals'}
+                  onClick={() => setBroadcast(v => !v)}
+                  disabled={tabs.length < 2}
+                >
+                  📡
+                </button>
+                <button
                   className={`toolbar-btn ${rightPanel === 'sftp' ? 'active' : ''}`}
                   title={isSerialTab ? 'SFTP not available for serial connections' : 'File Browser (SFTP)'}
                   onClick={() => toggleRightPanel('sftp')}
@@ -331,18 +351,24 @@ export default function App() {
           )}
 
           {/* Content: terminals + optional SFTP panel */}
-          <div className="content-area">
+          <div className={`content-area ${tiled ? 'tiled' : ''} ${broadcast ? 'broadcasting' : ''}`}>
             {tabs.map(tab => (
-              <div key={tab.id} className={`tab-content ${tab.id === activeTab ? 'visible' : 'hidden'}`}>
-                <div className={`pane-wrapper ${rightPanel === 'sftp' ? 'split' : ''}`}>
+              <div
+                key={tab.id}
+                className={`tab-content ${tiled ? 'tiled-pane' : ''} ${tiled && tab.id === activeTab ? 'active-pane' : ''} ${tiled || tab.id === activeTab ? 'visible' : 'hidden'}`}
+                onClick={tiled ? () => setActiveTab(tab.id) : undefined}
+              >
+                <div className={`pane-wrapper ${rightPanel === 'sftp' && !tiled ? 'split' : ''}`}>
                   <Terminal
                     connId={tab.id}
-                    active={tab.id === activeTab}
+                    active={tiled || tab.id === activeTab}
                     fontFamily={settings.fontFamily}
                     fontSize={settings.fontSize}
                     theme={settings.theme}
+                    broadcast={broadcast}
+                    broadcastTargets={tabs.map(t => t.id)}
                   />
-                  {rightPanel === 'sftp' && <SftpPanel connId={tab.id} />}
+                  {rightPanel === 'sftp' && !tiled && <SftpPanel connId={tab.id} />}
                 </div>
               </div>
             ))}
@@ -412,6 +438,7 @@ export default function App() {
           prefill={connectPrefill}
           defaultGroup={connectDefaultGroup}
           groups={groups}
+          sshSessions={sessions.filter(s => s.authType !== 'serial').map(s => ({ id: s.id, name: s.name, host: s.host }))}
           onConnect={openConnection}
           onSave={async (session) => {
             const id = await window.api.sessions.save(session)

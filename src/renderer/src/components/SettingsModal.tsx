@@ -5,6 +5,7 @@ export interface AppSettings {
   fontFamily: string
   fontSize: number
   defaultGroup: string
+  sessionLogging: boolean
 }
 
 interface Props {
@@ -258,6 +259,25 @@ export default function SettingsModal({ settings, groups, onApply, onSessionsCha
             )}
             {backupMsg && <div className="backup-msg">{backupMsg}</div>}
             {backupErr && <div className="tunnel-err">{backupErr}</div>}
+          </div>
+
+          <div className="form-row">
+            <label>Session Logging</label>
+            <p className="settings-preview-note">
+              When enabled, all terminal output for new connections is recorded to timestamped
+              log files. Already-open sessions are not affected.
+            </p>
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={local.sessionLogging}
+                onChange={e => patch({ sessionLogging: e.target.checked })}
+              />
+              Record terminal output to log files
+            </label>
+            <div className="backup-btns">
+              <button onClick={() => window.api.logs.open()}>Open Logs Folder…</button>
+            </div>
           </div>
 
           <div className="form-row">

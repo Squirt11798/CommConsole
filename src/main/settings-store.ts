@@ -3,22 +3,24 @@
  * settings.json in the user data dir. Distinct from the credential vault.
  */
 
-import { ipcMain, app } from 'electron'
+import { ipcMain, app, shell } from 'electron'
 import { join } from 'path'
-import { readFileSync, writeFileSync, existsSync } from 'fs'
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
 
 export interface AppSettings {
   theme: string          // 'olive' | 'desert' | 'navy' | 'light'
   fontFamily: string     // terminal + UI mono font
   fontSize: number       // terminal font size (px)
   defaultGroup: string   // pre-selected group for new connections
+  sessionLogging: boolean // record terminal output to timestamped log files
 }
 
 const DEFAULTS: AppSettings = {
   theme: 'olive',
   fontFamily: '"Cascadia Code", "Fira Code", "Consolas", monospace',
   fontSize: 14,
-  defaultGroup: ''
+  defaultGroup: '',
+  sessionLogging: false
 }
 
 const settingsPath = (): string => join(app.getPath('userData'), 'settings.json')
@@ -37,6 +39,18 @@ function save(s: AppSettings): void {
   writeFileSync(settingsPath(), JSON.stringify(s, null, 2), 'utf-8')
 }
 
+/** Whether session logging is currently enabled (read by the SSH/serial managers). */
+export function isLoggingEnabled(): boolean {
+  return load().sessionLogging === true
+}
+
+/** Directory where session logs are written (created on demand). */
+export function sessionLogsDir(): string {
+  const dir = join(app.getPath('userData'), 'session-logs')
+  try { mkdirSync(dir, { recursive: true }) } catch { /* ignore */ }
+  return dir
+}
+
 export function registerSettingsHandlers(): void {
   ipcMain.handle('settings:get', () => load())
 
@@ -48,7 +62,12 @@ export function registerSettingsHandlers(): void {
     if (typeof next.theme !== 'string' || !next.theme) next.theme = DEFAULTS.theme
     if (typeof next.fontFamily !== 'string' || !next.fontFamily.trim()) next.fontFamily = DEFAULTS.fontFamily
     if (typeof next.defaultGroup !== 'string') next.defaultGroup = ''
+    next.sessionLogging = !!next.sessionLogging
     save(next)
     return next
   })
+
+  // Open the session-logs folder in the OS file manager.
+  ipcMain.handle('logs:open', () => shell.openPath(sessionLogsDir()))
+  ipcMain.handle('logs:dir', () => sessionLogsDir())
 }

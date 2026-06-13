@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react'
 interface TunnelRow {
   id: string
   name: string
-  type: 'local' | 'remote'
+  type: 'local' | 'remote' | 'dynamic'
   sessionId: string
   listenHost: string
   listenPort: number
@@ -27,7 +27,7 @@ interface Props {
 const BLANK = {
   id: undefined as string | undefined,
   name: '',
-  type: 'local' as 'local' | 'remote',
+  type: 'local' as 'local' | 'remote' | 'dynamic',
   sessionId: '',
   listenHost: '127.0.0.1',
   listenPort: '',
@@ -120,13 +120,15 @@ export default function TunnelManager({ onClose }: Props) {
                 <div key={t.id} className={`tunnel-row state-${t.state}`}>
                   <div className="tunnel-info">
                     <div className="tunnel-name">
-                      <span className="tunnel-type-badge">{t.type === 'local' ? '-L' : '-R'}</span>
+                      <span className="tunnel-type-badge">{t.type === 'local' ? '-L' : t.type === 'remote' ? '-R' : '-D'}</span>
                       {t.name}
                     </div>
                     <div className="tunnel-detail">
                       {t.type === 'local'
                         ? `${t.listenHost}:${t.listenPort} → ${t.destHost}:${t.destPort}`
-                        : `remote ${t.listenHost}:${t.listenPort} → ${t.destHost}:${t.destPort}`}
+                        : t.type === 'remote'
+                          ? `remote ${t.listenHost}:${t.listenPort} → ${t.destHost}:${t.destPort}`
+                          : `SOCKS5 proxy on ${t.listenHost}:${t.listenPort}`}
                       {' · via '}{sessName(t.sessionId)}
                     </div>
                     {t.error && <div className="tunnel-err">{t.error}</div>}
@@ -157,6 +159,7 @@ export default function TunnelManager({ onClose }: Props) {
                 <div className="radio-group">
                   <label><input type="radio" checked={editing.type === 'local'} onChange={() => setEditing({ ...editing, type: 'local' })} /> Local (-L)</label>
                   <label><input type="radio" checked={editing.type === 'remote'} onChange={() => setEditing({ ...editing, type: 'remote' })} /> Remote (-R)</label>
+                  <label><input type="radio" checked={editing.type === 'dynamic'} onChange={() => setEditing({ ...editing, type: 'dynamic' })} /> Dynamic SOCKS (-D)</label>
                 </div>
               </div>
               <div className="form-row">
@@ -168,24 +171,31 @@ export default function TunnelManager({ onClose }: Props) {
               </div>
               <div className="form-row two-col">
                 <div>
-                  <label>{editing.type === 'local' ? 'Local Bind Host' : 'Remote Bind Host'}</label>
+                  <label>{editing.type === 'remote' ? 'Remote Bind Host' : 'Local Bind Host'}</label>
                   <input value={editing.listenHost} onChange={e => setEditing({ ...editing, listenHost: e.target.value })} placeholder="127.0.0.1" />
                 </div>
                 <div>
-                  <label>Listen Port</label>
-                  <input value={editing.listenPort} onChange={e => setEditing({ ...editing, listenPort: e.target.value })} placeholder="8080" style={{ width: 90 }} />
+                  <label>{editing.type === 'dynamic' ? 'SOCKS Port' : 'Listen Port'}</label>
+                  <input value={editing.listenPort} onChange={e => setEditing({ ...editing, listenPort: e.target.value })} placeholder={editing.type === 'dynamic' ? '1080' : '8080'} style={{ width: 90 }} />
                 </div>
               </div>
-              <div className="form-row two-col">
-                <div>
-                  <label>Destination Host</label>
-                  <input value={editing.destHost} onChange={e => setEditing({ ...editing, destHost: e.target.value })} placeholder="10.0.0.5 or localhost" />
+              {editing.type === 'dynamic' ? (
+                <p className="settings-preview-note">
+                  Point a browser or app at SOCKS5 proxy <code>{editing.listenHost || '127.0.0.1'}:{editing.listenPort || '1080'}</code> to
+                  route its traffic through this SSH session. No fixed destination needed.
+                </p>
+              ) : (
+                <div className="form-row two-col">
+                  <div>
+                    <label>Destination Host</label>
+                    <input value={editing.destHost} onChange={e => setEditing({ ...editing, destHost: e.target.value })} placeholder="10.0.0.5 or localhost" />
+                  </div>
+                  <div>
+                    <label>Destination Port</label>
+                    <input value={editing.destPort} onChange={e => setEditing({ ...editing, destPort: e.target.value })} placeholder="3389" style={{ width: 90 }} />
+                  </div>
                 </div>
-                <div>
-                  <label>Destination Port</label>
-                  <input value={editing.destPort} onChange={e => setEditing({ ...editing, destPort: e.target.value })} placeholder="3389" style={{ width: 90 }} />
-                </div>
-              </div>
+              )}
               <div className="form-row">
                 <label className="checkbox-row">
                   <input type="checkbox" checked={editing.autoStart} onChange={e => setEditing({ ...editing, autoStart: e.target.checked })} />

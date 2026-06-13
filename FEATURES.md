@@ -1,6 +1,6 @@
 # CommConsole — Feature Checklist
 
-Tracking what's built and what's planned. Current version: **v1.11.1**.
+Tracking what's built and what's planned. Current version: **v1.12.0**.
 
 ## ✅ Implemented
 
@@ -22,6 +22,13 @@ Tracking what's built and what's planned. Current version: **v1.11.1**.
 
 ### Connectivity
 - [x] SSH port forwarding — local (-L) and remote (-R) tunnels *(v1.7.0)*
+- [x] Dynamic / SOCKS5 proxy tunnel (-D) *(v1.12.0)*
+- [x] SSH jump host / ProxyJump chaining (connect through a bastion) *(v1.12.0)*
+
+### Productivity
+- [x] Split / tiled view — all open terminals in a grid *(v1.12.0)*
+- [x] Broadcast input — type once, send to every open terminal *(v1.12.0)*
+- [x] Session logging — record terminal output to timestamped files *(v1.12.0)*
 
 ### Appearance
 - [x] Settings page *(v1.8.0)*
@@ -37,12 +44,6 @@ Tracking what's built and what's planned. Current version: **v1.11.1**.
 - [x] TOTP 2FA-gated unlock *(v1.10.0)*
 
 ## ⬜ Planned / Not Yet Implemented
-
-### High priority
-- [ ] **Split panes + broadcast input** (tile multiple terminals; type to all at once)
-- [ ] Dynamic / SOCKS proxy tunnel (-D)
-- [ ] SSH jump host / ProxyJump chaining (connect through a bastion)
-- [ ] Session-level logging (record terminal output to timestamped file)
 
 ### Quality of life
 - [ ] Snippets / command library (saved command buttons, broadcastable)

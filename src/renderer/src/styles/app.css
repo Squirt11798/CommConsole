@@ -595,7 +595,28 @@ body { font-family: system-ui, sans-serif; font-size: 13px; color: var(--text); 
 }
 
 /* ── Content area ── */
-.content-area { flex: 1; display: flex; overflow: hidden; }
+.content-area { flex: 1; display: flex; overflow: hidden; position: relative; }
+
+/* Split / tiled view — show every open terminal in a responsive grid */
+.content-area.tiled {
+  display: grid;
+  gap: 2px;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  grid-auto-rows: 1fr;
+  overflow: auto;
+  background: var(--border);
+}
+.content-area.tiled .tab-content.tiled-pane {
+  display: flex !important;
+  min-height: 220px;
+  border: 1px solid var(--border);
+  background: var(--bg-0);
+}
+.content-area.tiled .tab-content.active-pane { border-color: var(--accent); }
+
+/* Broadcast input active — make it obvious every terminal is receiving keys */
+.content-area.broadcasting { outline: 2px solid var(--danger); outline-offset: -2px; }
+.toolbar-btn.danger-active { background: var(--danger); opacity: 1; }
 
 /* ── Tab toolbar ── */
 .tab-toolbar { margin-left: auto; display: flex; align-items: center; gap: 2px; padding-right: 6px; }

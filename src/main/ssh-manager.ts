@@ -1,9 +1,125 @@
 import { ipcMain, BrowserWindow, dialog } from 'electron'
 import { Client, SFTPWrapper } from 'ssh2'
+import type { ConnectConfig } from 'ssh2'
 import { readFileSync, existsSync } from 'fs'
 import { randomUUID } from 'crypto'
-import { getDecryptedCredentials } from './credential-store'
+import { getDecryptedCredentials, getSessionForConnect, getJumpSessionId } from './credential-store'
 import { computeFingerprint, checkHost, trustHost } from './known-hosts'
+import { startLog, appendLog, endLog } from './session-log'
+
+type HostVerifier = (key: Buffer, callback: (result: boolean) => void) => void
+
+/**
+ * Build a TOFU host-key verifier for a given host/port. New hosts prompt the
+ * user to verify the fingerprint; changed keys raise a possible-MITM warning.
+ */
+function makeHostVerifier(win: BrowserWindow, host: string, port: number): HostVerifier {
+  return (key: Buffer, callback: (result: boolean) => void) => {
+    const fp = computeFingerprint(key)
+    const check = checkHost(host, port, fp)
+
+    if (check.status === 'ok') { callback(true); return }
+
+    if (check.status === 'new') {
+      dialog.showMessageBox(win, {
+        type: 'question',
+        title: 'Unknown Host — Verify Fingerprint',
+        message: `Connect to ${host}:${port}?`,
+        detail: `This host has not been seen before.\n\nSHA-256 fingerprint:\n${fp}\n\nVerify this fingerprint out-of-band (e.g. via the server console) before trusting it.`,
+        buttons: ['Trust & Connect', 'Cancel'],
+        defaultId: 0,
+        cancelId: 1
+      }).then(({ response }) => {
+        if (response === 0) { trustHost(host, port, fp); callback(true) }
+        else callback(false)
+      })
+      return
+    }
+
+    // status === 'changed' — potential MITM
+    dialog.showMessageBox(win, {
+      type: 'warning',
+      title: 'Host Key Changed — Possible MITM Attack',
+      message: `WARNING: The host key for ${host}:${port} has changed!`,
+      detail: `Stored fingerprint:\n${check.stored}\n\nPresented fingerprint:\n${check.fingerprint}\n\nThis could indicate a man-in-the-middle attack. Do NOT connect unless you know why the host key changed (e.g. the server was rebuilt).`,
+      buttons: ['Cancel', 'Connect Anyway (update stored key)'],
+      defaultId: 0,
+      cancelId: 0
+    }).then(({ response }) => {
+      if (response === 1) { trustHost(host, port, check.fingerprint); callback(true) }
+      else callback(false)
+    })
+  }
+}
+
+/**
+ * Connect a jump-host (bastion) chain and return a stream tunneled to the
+ * final target host:port. Supports multiple hops — if a jump session itself
+ * has a jump configured, it is connected first (bounded to avoid loops).
+ * Resolves with the forwarded stream (to use as `sock`) and the list of jump
+ * clients so the caller can tear them down when the main connection closes.
+ */
+function connectJumpChain(
+  win: BrowserWindow,
+  jumpSessionId: string,
+  targetHost: string,
+  targetPort: number,
+  depth = 0
+): Promise<{ sock: NodeJS.ReadableStream; clients: Client[] }> {
+  if (depth > 10) return Promise.reject(new Error('Jump-host chain too deep (possible loop).'))
+
+  const sess = getSessionForConnect(jumpSessionId)
+  if (!sess) return Promise.reject(new Error('The configured jump-host session no longer exists.'))
+  if (!sess.host) return Promise.reject(new Error('The jump-host session has no host.'))
+
+  const jumpPort = sess.port || 22
+
+  const buildJumpConfig = (sock?: NodeJS.ReadableStream): ConnectConfig => {
+    const cfg: ConnectConfig = {
+      host: sess.host,
+      port: jumpPort,
+      username: sess.username,
+      readyTimeout: 20000,
+      keepaliveInterval: 10000,
+      tryKeyboard: false,
+      hostVerifier: makeHostVerifier(win, sess.host, jumpPort)
+    }
+    if (sock) cfg.sock = sock as ConnectConfig['sock']
+    if (sess.authType === 'key') {
+      if (sess.privateKey) cfg.privateKey = Buffer.from(sess.privateKey)
+      else if (sess.keyPath && existsSync(sess.keyPath)) cfg.privateKey = readFileSync(sess.keyPath)
+      if (sess.passphrase) cfg.passphrase = sess.passphrase
+    } else if (sess.password) {
+      cfg.password = sess.password
+    }
+    return cfg
+  }
+
+  // If this jump host is itself reached through another jump, resolve that first.
+  const upstream = getJumpSessionId(jumpSessionId)
+
+  return new Promise((resolve, reject) => {
+    const open = (sock?: NodeJS.ReadableStream, upstreamClients: Client[] = []): void => {
+      const jump = new Client()
+      jump.on('error', (err) => reject(new Error(`Jump host ${sess.host} failed: ${err.message}`)))
+      jump.on('ready', () => {
+        jump.forwardOut('127.0.0.1', 0, targetHost, targetPort, (err, stream) => {
+          if (err) { jump.end(); return reject(new Error(`Jump forward to ${targetHost}:${targetPort} failed: ${err.message}`)) }
+          resolve({ sock: stream, clients: [...upstreamClients, jump] })
+        })
+      })
+      jump.connect(buildJumpConfig(sock))
+    }
+
+    if (upstream && upstream !== jumpSessionId) {
+      connectJumpChain(win, upstream, sess.host, jumpPort, depth + 1)
+        .then(({ sock, clients }) => open(sock, clients))
+        .catch(reject)
+    } else {
+      open()
+    }
+  })
+}
 
 interface Connection {
   id: string
@@ -116,16 +232,22 @@ export function registerSshHandlers(win: BrowserWindow): void {
           if (err) { client.end(); return reject(err) }
 
           connections.set(connId, { id: connId, client, sftp: null, sessionId: opts.sessionId ?? null, cipher: negCipher, kex: negKex })
+          startLog(connId, `${username}@${host}`)
 
           stream.on('data', (data: Buffer) => {
-            send(win, 'ssh:data', connId, data.toString('binary'))
+            const s = data.toString('binary')
+            appendLog(connId, s)
+            send(win, 'ssh:data', connId, s)
           })
 
           stream.stderr.on('data', (data: Buffer) => {
-            send(win, 'ssh:data', connId, data.toString('binary'))
+            const s = data.toString('binary')
+            appendLog(connId, s)
+            send(win, 'ssh:data', connId, s)
           })
 
           stream.on('close', () => {
+            endLog(connId)
             connections.delete(connId)
             send(win, 'ssh:closed', connId)
           })
@@ -177,56 +299,7 @@ export function registerSshHandlers(win: BrowserWindow): void {
         tryKeyboard: true,
         readyTimeout: 20000,
         keepaliveInterval: 10000,
-
-        // ── TOFU host key verification ──────────────────────────────────────
-        hostVerifier: (key: Buffer, callback: (result: boolean) => void) => {
-          const fp = computeFingerprint(key)
-          const check = checkHost(host, port, fp)
-
-          if (check.status === 'ok') {
-            callback(true)
-            return
-          }
-
-          if (check.status === 'new') {
-            dialog.showMessageBox(win, {
-              type: 'question',
-              title: 'Unknown Host — Verify Fingerprint',
-              message: `Connect to ${host}:${port}?`,
-              detail: `This host has not been seen before.\n\nSHA-256 fingerprint:\n${fp}\n\nVerify this fingerprint out-of-band (e.g. via the server console) before trusting it.`,
-              buttons: ['Trust & Connect', 'Cancel'],
-              defaultId: 0,
-              cancelId: 1
-            }).then(({ response }) => {
-              if (response === 0) {
-                trustHost(host, port, fp)
-                callback(true)
-              } else {
-                callback(false)
-              }
-            })
-            return
-          }
-
-          // status === 'changed' — potential MITM
-          dialog.showMessageBox(win, {
-            type: 'warning',
-            title: 'Host Key Changed — Possible MITM Attack',
-            message: `WARNING: The host key for ${host}:${port} has changed!`,
-            detail: `Stored fingerprint:\n${check.stored}\n\nPresented fingerprint:\n${check.fingerprint}\n\nThis could indicate a man-in-the-middle attack. Do NOT connect unless you know why the host key changed (e.g. the server was rebuilt).`,
-            buttons: ['Cancel', 'Connect Anyway (update stored key)'],
-            defaultId: 0,
-            cancelId: 0
-          }).then(({ response }) => {
-            if (response === 1) {
-              trustHost(host, port, check.fingerprint)
-              callback(true)
-            } else {
-              callback(false)
-            }
-          })
-        }
-        // ────────────────────────────────────────────────────────────────────
+        hostVerifier: makeHostVerifier(win, host, port)
       }
 
       if (privateKey) {
@@ -236,7 +309,21 @@ export function registerSshHandlers(win: BrowserWindow): void {
         connectConfig.password = password
       }
 
-      client.connect(connectConfig)
+      // ProxyJump: if this saved session routes through a bastion, build the
+      // jump chain first and connect over the resulting tunneled socket.
+      const jumpSessionId = opts.sessionId ? getJumpSessionId(opts.sessionId) : ''
+      if (jumpSessionId) {
+        connectJumpChain(win, jumpSessionId, host, port)
+          .then(({ sock, clients }) => {
+            connectConfig.sock = sock as Parameters<Client['connect']>[0]['sock']
+            // Tear down the jump chain when the main connection ends.
+            client.on('close', () => { for (const c of clients) { try { c.end() } catch { /* ignore */ } } })
+            client.connect(connectConfig)
+          })
+          .catch(reject)
+      } else {
+        client.connect(connectConfig)
+      }
     })
   })
 
@@ -254,6 +341,7 @@ export function registerSshHandlers(win: BrowserWindow): void {
     const conn = connections.get(connId)
     if (conn) {
       conn.client.end()
+      endLog(connId)
       connections.delete(connId)
     }
   })

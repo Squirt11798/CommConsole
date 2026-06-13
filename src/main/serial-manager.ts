@@ -1,6 +1,7 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { SerialPort } from 'serialport'
 import { randomUUID } from 'crypto'
+import { startLog, appendLog, endLog } from './session-log'
 
 interface SerialConnection {
   id: string
@@ -47,10 +48,13 @@ export function registerSerialHandlers(win: BrowserWindow): void {
       })
 
       port.on('data', (data: Buffer) => {
-        send(win, 'ssh:data', connId, data.toString('binary'))
+        const s = data.toString('binary')
+        appendLog(connId, s)
+        send(win, 'ssh:data', connId, s)
       })
 
       port.on('close', () => {
+        endLog(connId)
         serialConnections.delete(connId)
         send(win, 'ssh:closed', connId)
       })
@@ -71,6 +75,7 @@ export function registerSerialHandlers(win: BrowserWindow): void {
           return
         }
         serialConnections.set(connId, { id: connId, port })
+        startLog(connId, opts.path)
         resolve({ id: connId })
       })
     })
@@ -90,6 +95,7 @@ export function registerSerialHandlers(win: BrowserWindow): void {
     if (conn && conn.port.isOpen) {
       conn.port.close()
     }
+    endLog(connId)
     serialConnections.delete(connId)
   })
 }
