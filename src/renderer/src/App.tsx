@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import SessionSidebar from './components/SessionSidebar'
 import Terminal from './components/Terminal'
 import SftpPanel from './components/SftpPanel'
@@ -12,6 +12,25 @@ import type { AppSettings } from './components/SettingsModal'
 import LockScreen from './components/LockScreen'
 import StatusBar from './components/StatusBar'
 import QuickConnect from './components/QuickConnect'
+import SnippetsModal from './components/SnippetsModal'
+
+export interface ConnectArgs {
+  sessionId?: string
+  host: string
+  port: number
+  username: string
+  authType: 'password' | 'key' | 'serial'
+  password?: string
+  privateKeyPath?: string
+  passphrase?: string
+  serialPort?: string
+  baudRate?: number
+  dataBits?: number
+  parity?: string
+  stopBits?: number
+  color?: string
+  label: string
+}
 
 export interface Tab {
   id: string
@@ -20,6 +39,8 @@ export interface Tab {
   connType: 'ssh' | 'serial'
   color: string   // tag color (hex); '' = none
   openedAt: number // ms epoch when the connection opened (for uptime)
+  connectArgs?: ConnectArgs // how this tab was opened, for reconnecting after a drop
+  disconnected?: boolean    // connection dropped unexpectedly; awaiting reconnect
 }
 
 export interface SavedSession {
@@ -90,6 +111,7 @@ export default function App() {
   const [showImport, setShowImport] = useState(false)
   const [showTunnels, setShowTunnels] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [showSnippets, setShowSnippets] = useState(false)
   const [settings, setSettings] = useState<AppSettings>({
     theme: 'olive',
     fontFamily: '"Cascadia Code", "Fira Code", "Consolas", monospace',
@@ -110,6 +132,7 @@ export default function App() {
   const [broadcast, setBroadcast] = useState(false) // mirror typed input to all terminals
   const [dragTabId, setDragTabId] = useState<string | null>(null) // tab being dragged to reorder
   const [toast, setToast] = useState('')           // transient status message (uploads, etc.)
+  const userClosingRef = useRef<Set<string>>(new Set()) // connIds the user is intentionally closing
 
   const loadSessions = useCallback(async () => {
     const [list, grps] = await Promise.all([
@@ -193,11 +216,20 @@ export default function App() {
       // Clear a keyboard-interactive prompt tied to a closed/failed connection
       // so its overlay can't linger and block input.
       setSshPrompt(prev => (prev && prev.connId === connId ? null : prev))
-      setTabs(prev => {
-        const next = prev.filter(t => t.id !== connId)
-        setActiveTab(prev2 => prev2 === connId ? (next[next.length - 1]?.id ?? null) : prev2)
-        return next
-      })
+
+      if (userClosingRef.current.has(connId)) {
+        // User closed this tab intentionally — remove it.
+        userClosingRef.current.delete(connId)
+        setTabs(prev => {
+          const next = prev.filter(t => t.id !== connId)
+          setActiveTab(prev2 => prev2 === connId ? (next[next.length - 1]?.id ?? null) : prev2)
+          return next
+        })
+      } else {
+        // Unexpected drop — keep the tab and mark it for reconnect. (Connect
+        // failures fire here too but have no matching tab, so this is a no-op.)
+        setTabs(prev => prev.map(t => t.id === connId ? { ...t, disconnected: true } : t))
+      }
     })
     const unsubPrompt = window.api.ssh.onPrompt((connId, promptId, name, instructions, prompts) => {
       // Keyboard-interactive fallback (e.g. no/incorrect password). Close the
@@ -209,47 +241,31 @@ export default function App() {
     return () => { unsubClosed(); unsubPrompt() }
   }, [loadSessions])
 
-  const openConnection = useCallback(async (opts: {
-    sessionId?: string
-    host: string
-    port: number
-    username: string
-    authType: 'password' | 'key' | 'serial'
-    password?: string
-    privateKeyPath?: string
-    passphrase?: string
-    serialPort?: string
-    baudRate?: number
-    dataBits?: number
-    parity?: string
-    stopBits?: number
-    color?: string
-    label: string
-  }): Promise<void> => {
+  const showToast = useCallback((msg: string) => {
+    setToast(msg)
+    window.setTimeout(() => setToast(cur => (cur === msg ? '' : cur)), 4500)
+  }, [])
+
+  // Establish a connection (SSH or serial) and return the new connId + metadata.
+  const establish = useCallback(async (args: ConnectArgs): Promise<{ id: string; connType: 'ssh' | 'serial'; host: string }> => {
+    if (args.authType === 'serial') {
+      const result = await window.api.serial.connect({
+        path: args.serialPort!,
+        baudRate: args.baudRate ?? 9600,
+        dataBits: args.dataBits,
+        parity: args.parity,
+        stopBits: args.stopBits
+      })
+      return { id: result.id, connType: 'serial', host: args.serialPort! }
+    }
+    const result = await window.api.ssh.connect(args)
+    return { id: result.id, connType: 'ssh', host: args.host }
+  }, [])
+
+  const openConnection = useCallback(async (args: ConnectArgs): Promise<void> => {
     try {
-      let id: string
-      let connType: 'ssh' | 'serial'
-      let tabHost: string
-
-      if (opts.authType === 'serial') {
-        const result = await window.api.serial.connect({
-          path: opts.serialPort!,
-          baudRate: opts.baudRate ?? 9600,
-          dataBits: opts.dataBits,
-          parity: opts.parity,
-          stopBits: opts.stopBits
-        })
-        id = result.id
-        connType = 'serial'
-        tabHost = opts.serialPort!
-      } else {
-        const result = await window.api.ssh.connect(opts)
-        id = result.id
-        connType = 'ssh'
-        tabHost = opts.host
-      }
-
-      const tab: Tab = { id, label: opts.label, host: tabHost, connType, color: opts.color ?? '', openedAt: Date.now() }
+      const { id, connType, host } = await establish(args)
+      const tab: Tab = { id, label: args.label, host, connType, color: args.color ?? '', openedAt: Date.now(), connectArgs: args }
       setTabs(prev => [...prev, tab])
       setActiveTab(id)
       setShowConnect(false)
@@ -257,7 +273,21 @@ export default function App() {
       alert(`Connection failed:\n\n${err instanceof Error ? err.message : String(err)}`)
       throw err   // rethrow so ConnectModal resets its connecting state
     }
-  }, [])
+  }, [establish])
+
+  // Reconnect a dropped tab in place: open a fresh connection from the saved
+  // args and swap the tab's id to the new connId (Terminal remounts cleanly).
+  const reconnectTab = useCallback(async (tabId: string) => {
+    const tab = tabs.find(t => t.id === tabId)
+    if (!tab?.connectArgs) return
+    try {
+      const { id } = await establish(tab.connectArgs)
+      setTabs(prev => prev.map(t => t.id === tabId ? { ...t, id, disconnected: false, openedAt: Date.now() } : t))
+      setActiveTab(cur => cur === tabId ? id : cur)
+    } catch (err) {
+      showToast(`Reconnect failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }, [tabs, establish, showToast])
 
   const moveSession = useCallback(async (sessionId: string, groupName: string) => {
     const session = sessions.find(s => s.id === sessionId)
@@ -283,6 +313,8 @@ export default function App() {
 
   const closeTab = useCallback(async (connId: string) => {
     const tab = tabs.find(t => t.id === connId)
+    // Mark as an intentional close so the drop handler doesn't offer reconnect.
+    userClosingRef.current.add(connId)
     if (tab?.connType === 'serial') {
       await window.api.serial.disconnect(connId)
     } else {
@@ -327,11 +359,6 @@ export default function App() {
     })
   }, [])
 
-  const showToast = useCallback((msg: string) => {
-    setToast(msg)
-    window.setTimeout(() => setToast(cur => (cur === msg ? '' : cur)), 4500)
-  }, [])
-
   // SFTP-upload files dropped onto an SSH terminal to its remote working dir.
   const uploadFilesToTab = useCallback(async (connId: string, files: Array<{ path: string; name: string }>) => {
     if (files.length === 0) return
@@ -345,6 +372,15 @@ export default function App() {
       showToast(`Upload failed: ${err instanceof Error ? err.message : String(err)}`)
     }
   }, [showToast])
+
+  // Send a snippet to the active terminal, or to all terminals when broadcasting.
+  const sendSnippet = useCallback((command: string) => {
+    const text = command.endsWith('\n') ? command : command + '\n'
+    const targets = broadcast ? tabs.map(t => t.id) : (activeTab ? [activeTab] : [])
+    if (targets.length === 0) return
+    targets.forEach(id => window.api.ssh.sendData(id, text))
+    showToast(broadcast ? `Snippet sent to ${targets.length} terminal(s)` : 'Snippet sent')
+  }, [broadcast, tabs, activeTab, showToast])
 
   const activeTabData = tabs.find(t => t.id === activeTab)
   const isConnected = tabs.length > 0 && activeTab !== null
@@ -394,7 +430,7 @@ export default function App() {
               {tabs.map(tab => (
                 <div
                   key={tab.id}
-                  className={`tab ${tab.id === activeTab ? 'active' : ''} ${tab.color ? 'tagged' : ''} ${dragTabId === tab.id ? 'dragging' : ''}`}
+                  className={`tab ${tab.id === activeTab ? 'active' : ''} ${tab.color ? 'tagged' : ''} ${dragTabId === tab.id ? 'dragging' : ''} ${tab.disconnected ? 'disconnected' : ''}`}
                   style={tab.color ? { ['--tag' as string]: tab.color } : undefined}
                   onClick={() => setActiveTab(tab.id)}
                   draggable
@@ -404,6 +440,7 @@ export default function App() {
                   onDragEnd={() => setDragTabId(null)}
                 >
                   {tab.color && <span className="tab-color-dot" style={{ background: tab.color }} />}
+                  {tab.disconnected && <span className="tab-warn" title="Disconnected">⚠</span>}
                   <span className="tab-label">{tab.label}</span>
                   <button
                     className="tab-close"
@@ -432,6 +469,13 @@ export default function App() {
                   disabled={tabs.length < 2}
                 >
                   📡
+                </button>
+                <button
+                  className="toolbar-btn"
+                  title="Snippets (command library)"
+                  onClick={() => setShowSnippets(true)}
+                >
+                  ⌨
                 </button>
                 <button
                   className={`toolbar-btn ${rightPanel === 'sftp' ? 'active' : ''}`}
@@ -474,6 +518,18 @@ export default function App() {
                   />
                   {rightPanel === 'sftp' && !tiled && <SftpPanel connId={tab.id} />}
                 </div>
+                {tab.disconnected && (
+                  <div className="disconnected-overlay" onClick={e => e.stopPropagation()}>
+                    <div className="disconnected-box">
+                      <div className="disconnected-title">⚠ Connection lost</div>
+                      <div className="disconnected-host">{tab.label}</div>
+                      <div className="disconnected-actions">
+                        <button className="btn-primary" onClick={() => reconnectTab(tab.id)}>Reconnect</button>
+                        <button onClick={() => closeTab(tab.id)}>Close</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
 
@@ -514,6 +570,15 @@ export default function App() {
       )}
 
       {showTunnels && <TunnelManager onClose={() => setShowTunnels(false)} />}
+
+      {showSnippets && (
+        <SnippetsModal
+          canSend={isConnected}
+          broadcast={broadcast}
+          onSend={sendSnippet}
+          onClose={() => setShowSnippets(false)}
+        />
+      )}
 
       {showSettings && (
         <SettingsModal

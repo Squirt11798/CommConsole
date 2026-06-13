@@ -110,6 +110,14 @@ const api = {
     dir: (): Promise<string> => ipcRenderer.invoke('logs:dir')
   },
 
+  snippets: {
+    list: (): Promise<Array<{ id: string; name: string; command: string }>> =>
+      ipcRenderer.invoke('snippets:list'),
+    save: (s: { id?: string; name?: string; command?: string }): Promise<string> =>
+      ipcRenderer.invoke('snippets:save', s),
+    delete: (id: string) => ipcRenderer.invoke('snippets:delete', id)
+  },
+
   tunnels: {
     list: (): Promise<unknown[]> => ipcRenderer.invoke('tunnels:list'),
     listSessions: (): Promise<Array<{ id: string; name: string; host: string }>> =>

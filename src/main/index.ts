@@ -7,6 +7,7 @@ import { registerTunnelHandlers, shutdownTunnels } from './tunnel-manager'
 import { registerSettingsHandlers } from './settings-store'
 import { registerKnownHostsHandlers } from './known-hosts'
 import { registerLockHandlers } from './lock-manager'
+import { registerSnippetHandlers } from './snippets-store'
 import { is } from '@electron-toolkit/utils'
 
 let mainWindow: BrowserWindow | null = null
@@ -120,6 +121,7 @@ app.whenReady().then(() => {
   registerSettingsHandlers()
   registerKnownHostsHandlers()
   registerLockHandlers(mainWindow!)
+  registerSnippetHandlers()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

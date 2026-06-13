@@ -1,7 +1,8 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
+import { SearchAddon } from '@xterm/addon-search'
 import '@xterm/xterm/css/xterm.css'
 
 interface Props {
@@ -64,6 +65,18 @@ export default function Terminal({ connId, active, fontFamily, fontSize, theme, 
   targetsRef.current = broadcastTargets ?? []
   onUploadRef.current = onUpload
 
+  // Scrollback search (Ctrl+F)
+  const searchAddonRef = useRef<SearchAddon | null>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const [showSearch, setShowSearch] = useState(false)
+  const [searchVal, setSearchVal] = useState('')
+
+  const closeSearch = (): void => {
+    setShowSearch(false)
+    searchAddonRef.current?.clearDecorations()
+    termRef.current?.focus()
+  }
+
   useEffect(() => {
     if (!containerRef.current) return
 
@@ -79,11 +92,24 @@ export default function Terminal({ connId, active, fontFamily, fontSize, theme, 
     const fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
     term.loadAddon(new WebLinksAddon())
+    const searchAddon = new SearchAddon()
+    term.loadAddon(searchAddon)
     term.open(containerRef.current)
     fitAddon.fit()
 
     termRef.current = term
     fitAddonRef.current = fitAddon
+    searchAddonRef.current = searchAddon
+
+    // Ctrl/Cmd+F opens the in-terminal search box (don't pass the key to the shell)
+    term.attachCustomKeyEventHandler((e) => {
+      if (e.type === 'keydown' && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        setShowSearch(true)
+        setTimeout(() => searchInputRef.current?.select(), 0)
+        return false
+      }
+      return true
+    })
 
     // Copy selection to system clipboard on mouse-up
     term.onSelectionChange(() => {
@@ -171,5 +197,39 @@ export default function Terminal({ connId, active, fontFamily, fontSize, theme, 
     fitAddonRef.current?.fit()
   }, [fontFamily, fontSize, theme])
 
-  return <div ref={containerRef} className="terminal-container" />
+  // Focus the search box when it opens
+  useEffect(() => { if (showSearch) searchInputRef.current?.focus() }, [showSearch])
+
+  const find = (forward: boolean): void => {
+    if (!searchVal) return
+    if (forward) searchAddonRef.current?.findNext(searchVal)
+    else searchAddonRef.current?.findPrevious(searchVal)
+  }
+
+  return (
+    <div className="terminal-wrap">
+      <div ref={containerRef} className="terminal-container" />
+      {showSearch && (
+        <div className="term-search">
+          <input
+            ref={searchInputRef}
+            value={searchVal}
+            placeholder="Find in scrollback…"
+            spellCheck={false}
+            onChange={e => {
+              setSearchVal(e.target.value)
+              searchAddonRef.current?.findNext(e.target.value, { incremental: true })
+            }}
+            onKeyDown={e => {
+              if (e.key === 'Enter') { e.preventDefault(); find(!e.shiftKey) }
+              else if (e.key === 'Escape') { e.preventDefault(); closeSearch() }
+            }}
+          />
+          <button onClick={() => find(false)} title="Previous (Shift+Enter)">↑</button>
+          <button onClick={() => find(true)} title="Next (Enter)">↓</button>
+          <button onClick={closeSearch} title="Close (Esc)">✕</button>
+        </div>
+      )}
+    </div>
+  )
 }

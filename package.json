@@ -1,6 +1,6 @@
 {
   "name": "commconsole",
-  "version": "1.13.0",
+  "version": "1.14.0",
   "description": "CommConsole — secure SSH, serial/COM, and SFTP terminal client",
   "main": "out/main/index.js",
   "author": "Derrick Frey",
@@ -16,6 +16,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@xterm/addon-search": "^0.15.0",
     "serialport": "^13.0.0",
     "ssh2": "^1.16.0"
   },

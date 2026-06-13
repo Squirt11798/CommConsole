@@ -225,19 +225,39 @@ body { font-family: system-ui, sans-serif; font-size: 13px; color: var(--text); 
 .tab-new:hover { color: var(--text); }
 
 /* ── Terminal ── */
-.tab-content { flex: 1; display: none; overflow: hidden; width: 100%; }
+.tab-content { flex: 1; display: none; overflow: hidden; width: 100%; position: relative; }
 .tab-content.visible { display: flex; }
 .tab-content.hidden { display: none; }
 
 .pane-wrapper { flex: 1; display: flex; overflow: hidden; }
 .pane-wrapper.split { gap: 0; }
 
+.terminal-wrap { flex: 1; position: relative; display: flex; min-width: 0; }
 .terminal-container {
   flex: 1; padding: 4px;
   background: var(--bg-0);
   overflow: hidden;
 }
 .terminal-container .xterm { height: 100%; }
+
+/* ── In-terminal search (Ctrl+F) ── */
+.term-search {
+  position: absolute; top: 6px; right: 10px; z-index: 20;
+  display: flex; align-items: center; gap: 3px;
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 5px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
+}
+.term-search input {
+  background: var(--bg-0); border: 1px solid var(--border); color: var(--text);
+  border-radius: 4px; padding: 3px 7px; font-size: 12px; width: 180px; outline: none;
+}
+.term-search input:focus { border-color: var(--accent); }
+.term-search button {
+  background: none; border: none; color: var(--text); cursor: pointer;
+  padding: 2px 6px; border-radius: 4px; font-size: 12px; opacity: 0.7;
+}
+.term-search button:hover { opacity: 1; background: var(--bg-3); }
 
 /* ── SFTP panel ── */
 .sftp-panel {
@@ -618,8 +638,45 @@ body { font-family: system-ui, sans-serif; font-size: 13px; color: var(--text); 
 /* ── Tab drag-to-reorder ── */
 .tab.dragging { opacity: 0.45; }
 
+/* ── Disconnected tab + reconnect overlay ── */
+.tab.disconnected .tab-label { color: var(--danger); }
+.tab-warn { color: var(--danger); font-size: 11px; margin-right: 2px; }
+.disconnected-overlay {
+  position: absolute; inset: 0; z-index: 15;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, 0.55); backdrop-filter: blur(1px);
+}
+.disconnected-box {
+  background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px;
+  padding: 22px 26px; text-align: center; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+}
+.disconnected-title { font-size: 15px; font-weight: 600; color: var(--danger); }
+.disconnected-host { font-size: 12px; opacity: 0.8; margin: 6px 0 14px; }
+.disconnected-actions { display: flex; gap: 8px; justify-content: center; }
+
 /* ── Drag-drop file upload onto terminal ── */
 .terminal-container.drag-over { outline: 2px dashed var(--accent); outline-offset: -4px; }
+
+/* ── Snippets ── */
+.snippet-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: 5px;
+  margin-bottom: 6px;
+}
+.snippet-info { flex: 1; min-width: 0; }
+.snippet-name { font-size: 13px; font-weight: 600; }
+.snippet-cmd {
+  display: block; font-size: 11px; opacity: 0.8; margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.snippet-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.snippet-actions button.danger:hover { background: var(--danger); }
+.snippet-textarea {
+  width: 100%; resize: vertical; font-family: inherit; font-size: 12px;
+  background: var(--bg-0); border: 1px solid var(--border); color: var(--text);
+  border-radius: 4px; padding: 7px 9px; outline: none;
+}
+.snippet-textarea:focus { border-color: var(--accent); }
 
 /* ── Toast ── */
 .toast {
