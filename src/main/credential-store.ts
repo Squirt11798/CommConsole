@@ -169,9 +169,14 @@ function decryptBackup(fileContent: string, passphrase: string): string {
 }
 
 export function registerCredentialHandlers(): void {
-  ipcMain.handle('sessions:list', (): Omit<SavedSession, 'encryptedPassword' | 'encryptedPrivateKey' | 'passphrase'>[] => {
-    // keyPath is NOT sensitive — it's just a file path — so it flows through in ...rest
-    return load().map(({ encryptedPassword: _p, encryptedPrivateKey: _k, passphrase: _pp, ...rest }) => rest)
+  ipcMain.handle('sessions:list', () => {
+    // keyPath is NOT sensitive — it's just a file path — so it flows through in ...rest.
+    // hasPassword tells the UI whether a stored password exists (without exposing it),
+    // so it can require the user to enter one when none is saved.
+    return load().map(({ encryptedPassword, encryptedPrivateKey: _k, passphrase: _pp, ...rest }) => ({
+      ...rest,
+      hasPassword: !!encryptedPassword
+    }))
   })
 
   ipcMain.handle('sessions:save', (_e, session: {

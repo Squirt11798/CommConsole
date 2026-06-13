@@ -36,6 +36,7 @@ export interface SavedSession {
   stopBits: number
   color: string         // tag color (hex); '' = none
   jumpSessionId: string // ProxyJump bastion session id; '' = direct
+  hasPassword: boolean  // whether a password is stored (the value is never sent to the renderer)
   group: string
   createdAt: string
 }

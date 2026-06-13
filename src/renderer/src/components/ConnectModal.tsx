@@ -92,7 +92,12 @@ export default function ConnectModal({ prefill, defaultGroup, groups, sshSession
   }
 
   const isSerial = authType === 'serial'
-  const canConnect = isSerial ? !!serialPort : (!!host && !!username)
+  // Password auth needs a password — either typed now, or already stored. Don't
+  // attempt a passwordless connect: many servers only offer 'password' auth (no
+  // keyboard-interactive), so it just hangs on the handshake timeout and fails.
+  const hasStoredPassword = !!prefill?.hasPassword
+  const needsPassword = authType === 'password' && !password && !hasStoredPassword
+  const canConnect = isSerial ? !!serialPort : (!!host && !!username && !needsPassword)
 
   const buildSessionObj = (savedId?: string) => ({
     id: savedId ?? prefill?.id,
@@ -233,9 +238,14 @@ export default function ConnectModal({ prefill, defaultGroup, groups, sshSession
                     type="password"
                     value={password}
                     onChange={e => setPassword(e.target.value)}
-                    placeholder={prefill ? '(stored — enter to change)' : ''}
+                    placeholder={hasStoredPassword ? '(stored — enter to change)' : 'Required'}
                     onKeyDown={e => { if (e.key === 'Enter') handleConnect() }}
                   />
+                  {needsPassword && (
+                    <p className="field-hint">
+                      No password is saved for this session — enter one to connect.
+                    </p>
+                  )}
                 </div>
               )}
 

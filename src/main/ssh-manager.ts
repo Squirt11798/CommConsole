@@ -280,6 +280,13 @@ export function registerSshHandlers(win: BrowserWindow): void {
         }
       })
 
+      // Whenever the connection ends, tell the renderer so it can drop the tab
+      // and clear any keyboard-interactive prompt tied to this connection.
+      client.on('close', () => {
+        connections.delete(connId)
+        send(win, 'ssh:closed', connId)
+      })
+
       // Capture negotiated crypto for the status bar (fires before 'ready')
       client.on('handshake', (neg: { kex?: string; cs?: { cipher?: string } }) => {
         negCipher = neg?.cs?.cipher

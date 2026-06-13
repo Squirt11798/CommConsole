@@ -594,6 +594,8 @@ body { font-family: system-ui, sans-serif; font-size: 13px; color: var(--text); 
   font-size: 11px; width: 100%; outline: none;
 }
 
+.field-hint { margin: 5px 0 0; font-size: 11px; color: var(--danger); }
+
 /* ── Content area ── */
 .content-area { flex: 1; display: flex; overflow: hidden; position: relative; }
 
