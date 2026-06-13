@@ -1,6 +1,6 @@
 # CommConsole — Feature Checklist
 
-Tracking what's built and what's planned. Current version: **v1.12.0**.
+Tracking what's built and what's planned. Current version: **v1.13.0**.
 
 ## ✅ Implemented
 
@@ -29,6 +29,9 @@ Tracking what's built and what's planned. Current version: **v1.12.0**.
 - [x] Split / tiled view — all open terminals in a grid *(v1.12.0)*
 - [x] Broadcast input — type once, send to every open terminal *(v1.12.0)*
 - [x] Session logging — record terminal output to timestamped files *(v1.12.0)*
+- [x] Quick-connect bar (`user@host:port` one-liner) *(v1.13.0)*
+- [x] Drag-to-reorder tabs *(v1.13.0)*
+- [x] Drag-drop file onto terminal → SFTP upload to remote cwd *(v1.13.0)*
 
 ### Appearance
 - [x] Settings page *(v1.8.0)*
@@ -47,11 +50,8 @@ Tracking what's built and what's planned. Current version: **v1.12.0**.
 
 ### Quality of life
 - [ ] Snippets / command library (saved command buttons, broadcastable)
-- [ ] Quick-connect bar (`user@host:port` one-liner)
 - [ ] Search in terminal scrollback (Ctrl+F)
 - [ ] Reconnect / auto-reconnect on dropped sessions
-- [ ] Drag-to-reorder tabs
-- [ ] Drag-drop file onto terminal to SFTP-upload to cwd
 
 ### Serial-specific
 - [ ] Send-file over serial

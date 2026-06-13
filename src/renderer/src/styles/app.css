@@ -596,6 +596,39 @@ body { font-family: system-ui, sans-serif; font-size: 13px; color: var(--text); 
 
 .field-hint { margin: 5px 0 0; font-size: 11px; color: var(--danger); }
 
+/* ── Quick connect ── */
+.quick-connect { display: flex; align-items: center; gap: 4px; }
+.quick-connect.compact { margin-left: 6px; }
+.quick-connect input {
+  background: var(--bg-0); border: 1px solid var(--border); color: var(--text);
+  border-radius: 4px; padding: 4px 8px; font-size: 12px; font-family: inherit;
+  outline: none;
+}
+.quick-connect.compact input { width: 150px; }
+.quick-connect input:focus { border-color: var(--accent); }
+.quick-connect button {
+  background: var(--bg-3); border: 1px solid var(--border); color: var(--text);
+  border-radius: 4px; padding: 4px 9px; cursor: pointer; font-size: 13px; line-height: 1;
+}
+.quick-connect button:hover:not(:disabled) { border-color: var(--accent); }
+.quick-connect button:disabled { opacity: 0.4; cursor: default; }
+.empty-quick-connect { margin-top: 16px; }
+.empty-quick-connect .quick-connect input { width: 220px; }
+
+/* ── Tab drag-to-reorder ── */
+.tab.dragging { opacity: 0.45; }
+
+/* ── Drag-drop file upload onto terminal ── */
+.terminal-container.drag-over { outline: 2px dashed var(--accent); outline-offset: -4px; }
+
+/* ── Toast ── */
+.toast {
+  position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+  background: var(--bg-2); border: 1px solid var(--border); color: var(--text);
+  padding: 9px 16px; border-radius: 6px; font-size: 12px; z-index: 1200;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4); cursor: pointer; max-width: 70%;
+}
+
 /* ── Content area ── */
 .content-area { flex: 1; display: flex; overflow: hidden; position: relative; }
 

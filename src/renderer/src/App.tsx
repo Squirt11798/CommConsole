@@ -11,6 +11,7 @@ import SettingsModal from './components/SettingsModal'
 import type { AppSettings } from './components/SettingsModal'
 import LockScreen from './components/LockScreen'
 import StatusBar from './components/StatusBar'
+import QuickConnect from './components/QuickConnect'
 
 export interface Tab {
   id: string
@@ -51,6 +52,35 @@ interface SshPromptData {
 
 type RightPanel = 'sftp' | 'none'
 
+// Parse a `user@host:port` quick-connect string (user and port optional).
+function parseQuickConnect(raw: string): { username: string; host: string; port: number } | null {
+  const s = raw.trim()
+  if (!s) return null
+  let username = ''
+  let rest = s
+  const at = s.indexOf('@')
+  if (at >= 0) { username = s.slice(0, at); rest = s.slice(at + 1) }
+  let host = rest
+  let port = 22
+  const colon = rest.lastIndexOf(':')
+  if (colon >= 0) {
+    const p = parseInt(rest.slice(colon + 1), 10)
+    if (!isNaN(p) && p >= 1 && p <= 65535) { host = rest.slice(0, colon); port = p }
+  }
+  host = host.trim()
+  if (!host) return null
+  return { username: username.trim(), host, port }
+}
+
+// Build a full SavedSession with sensible defaults, overlaying the given fields.
+function blankSession(part: Partial<SavedSession>): SavedSession {
+  return {
+    id: '', name: '', host: '', port: 22, username: '', authType: 'password',
+    keyPath: '', serialPort: '', baudRate: 9600, dataBits: 8, parity: 'none', stopBits: 1,
+    color: '', jumpSessionId: '', hasPassword: false, group: '', createdAt: '', ...part
+  }
+}
+
 export default function App() {
   const [tabs, setTabs] = useState<Tab[]>([])
   const [activeTab, setActiveTab] = useState<string | null>(null)
@@ -78,6 +108,8 @@ export default function App() {
   const [showMonitor, setShowMonitor] = useState(true)
   const [tiled, setTiled] = useState(false)        // split/tiled view of all open terminals
   const [broadcast, setBroadcast] = useState(false) // mirror typed input to all terminals
+  const [dragTabId, setDragTabId] = useState<string | null>(null) // tab being dragged to reorder
+  const [toast, setToast] = useState('')           // transient status message (uploads, etc.)
 
   const loadSessions = useCallback(async () => {
     const [list, grps] = await Promise.all([
@@ -267,6 +299,53 @@ export default function App() {
     setRightPanel(prev => prev === panel ? 'none' : panel)
   }
 
+  // Quick-connect: parse `user@host:port` and open the connect dialog pre-filled
+  // (password auth, so the user supplies the password before connecting).
+  const quickConnect = useCallback((raw: string) => {
+    const p = parseQuickConnect(raw)
+    if (!p) return
+    setConnectPrefill(blankSession({
+      host: p.host,
+      port: p.port,
+      username: p.username,
+      name: p.username ? `${p.username}@${p.host}` : p.host
+    }))
+    setConnectDefaultGroup(settings.defaultGroup || undefined)
+    setShowConnect(true)
+  }, [settings.defaultGroup])
+
+  // Reorder tabs (drag-and-drop): move the dragged tab to the drop target's slot.
+  const reorderTabs = useCallback((fromId: string, toId: string) => {
+    setTabs(prev => {
+      const from = prev.findIndex(t => t.id === fromId)
+      const to = prev.findIndex(t => t.id === toId)
+      if (from < 0 || to < 0 || from === to) return prev
+      const next = [...prev]
+      const [moved] = next.splice(from, 1)
+      next.splice(to, 0, moved)
+      return next
+    })
+  }, [])
+
+  const showToast = useCallback((msg: string) => {
+    setToast(msg)
+    window.setTimeout(() => setToast(cur => (cur === msg ? '' : cur)), 4500)
+  }, [])
+
+  // SFTP-upload files dropped onto an SSH terminal to its remote working dir.
+  const uploadFilesToTab = useCallback(async (connId: string, files: Array<{ path: string; name: string }>) => {
+    if (files.length === 0) return
+    try {
+      const pwd = await window.api.sftp.pwd(connId)
+      const base = pwd.endsWith('/') ? pwd : pwd + '/'
+      showToast(`Uploading ${files.length} file(s) to ${pwd}…`)
+      for (const f of files) await window.api.sftp.upload(connId, f.path, base + f.name)
+      showToast(`Uploaded ${files.length} file(s) to ${pwd}`)
+    } catch (err) {
+      showToast(`Upload failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }, [showToast])
+
   const activeTabData = tabs.find(t => t.id === activeTab)
   const isConnected = tabs.length > 0 && activeTab !== null
   const isSerialTab = activeTabData?.connType === 'serial'
@@ -315,9 +394,14 @@ export default function App() {
               {tabs.map(tab => (
                 <div
                   key={tab.id}
-                  className={`tab ${tab.id === activeTab ? 'active' : ''} ${tab.color ? 'tagged' : ''}`}
+                  className={`tab ${tab.id === activeTab ? 'active' : ''} ${tab.color ? 'tagged' : ''} ${dragTabId === tab.id ? 'dragging' : ''}`}
                   style={tab.color ? { ['--tag' as string]: tab.color } : undefined}
                   onClick={() => setActiveTab(tab.id)}
+                  draggable
+                  onDragStart={() => setDragTabId(tab.id)}
+                  onDragOver={e => { if (dragTabId && dragTabId !== tab.id) e.preventDefault() }}
+                  onDrop={() => { if (dragTabId) reorderTabs(dragTabId, tab.id); setDragTabId(null) }}
+                  onDragEnd={() => setDragTabId(null)}
                 >
                   {tab.color && <span className="tab-color-dot" style={{ background: tab.color }} />}
                   <span className="tab-label">{tab.label}</span>
@@ -328,6 +412,8 @@ export default function App() {
                 </div>
               ))}
               <button className="tab-new" onClick={() => { setConnectPrefill(null); setConnectDefaultGroup(settings.defaultGroup || undefined); setShowConnect(true) }}>+</button>
+
+              <QuickConnect compact onConnect={quickConnect} />
 
               {/* Right-side toolbar icons */}
               <div className="tab-toolbar">
@@ -384,6 +470,7 @@ export default function App() {
                     theme={settings.theme}
                     broadcast={broadcast}
                     broadcastTargets={tabs.map(t => t.id)}
+                    onUpload={tab.connType === 'ssh' ? (files) => uploadFilesToTab(tab.id, files) : undefined}
                   />
                   {rightPanel === 'sftp' && !tiled && <SftpPanel connId={tab.id} />}
                 </div>
@@ -398,6 +485,9 @@ export default function App() {
                 <button className="btn-primary" onClick={() => { setConnectPrefill(null); setConnectDefaultGroup(settings.defaultGroup || undefined); setShowConnect(true) }}>
                   New Connection
                 </button>
+                <div className="empty-quick-connect">
+                  <QuickConnect onConnect={quickConnect} />
+                </div>
               </div>
             )}
           </div>
@@ -413,6 +503,8 @@ export default function App() {
           )}
         </div>
       </div>
+
+      {toast && <div className="toast" onClick={() => setToast('')}>{toast}</div>}
 
       {showImport && (
         <ImportMobaModal

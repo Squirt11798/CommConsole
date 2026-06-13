@@ -12,6 +12,7 @@ interface Props {
   theme?: string
   broadcast?: boolean          // when true, typed input is mirrored to broadcastTargets
   broadcastTargets?: string[]  // connIds to mirror input to (includes this one)
+  onUpload?: (files: Array<{ path: string; name: string }>) => void  // SSH only: files dropped on the terminal
 }
 
 const DARK_ANSI = {
@@ -50,7 +51,7 @@ function buildTermTheme(theme?: string): Record<string, string> {
   }
 }
 
-export default function Terminal({ connId, active, fontFamily, fontSize, theme, broadcast, broadcastTargets }: Props) {
+export default function Terminal({ connId, active, fontFamily, fontSize, theme, broadcast, broadcastTargets, onUpload }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<XTerm | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
@@ -58,8 +59,10 @@ export default function Terminal({ connId, active, fontFamily, fontSize, theme, 
   // reads current values without being re-created.
   const broadcastRef = useRef<boolean>(!!broadcast)
   const targetsRef = useRef<string[]>(broadcastTargets ?? [])
+  const onUploadRef = useRef<Props['onUpload']>(onUpload)
   broadcastRef.current = !!broadcast
   targetsRef.current = broadcastTargets ?? []
+  onUploadRef.current = onUpload
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -116,13 +119,37 @@ export default function Terminal({ connId, active, fontFamily, fontSize, theme, 
     }
     containerRef.current.addEventListener('contextmenu', handleContextMenu)
 
+    // Drag-and-drop files onto the terminal → SFTP-upload to the remote cwd.
+    const container = containerRef.current
+    const handleDragOver = (e: DragEvent): void => {
+      if (!onUploadRef.current) return
+      e.preventDefault()
+      container.classList.add('drag-over')
+    }
+    const handleDragLeave = (): void => container.classList.remove('drag-over')
+    const handleDrop = (e: DragEvent): void => {
+      container.classList.remove('drag-over')
+      if (!onUploadRef.current) return
+      e.preventDefault()
+      const files = Array.from(e.dataTransfer?.files ?? [])
+        .map(f => ({ path: (f as File & { path?: string }).path ?? '', name: f.name }))
+        .filter(f => f.path)
+      if (files.length) onUploadRef.current(files)
+    }
+    container.addEventListener('dragover', handleDragOver)
+    container.addEventListener('dragleave', handleDragLeave)
+    container.addEventListener('drop', handleDrop)
+
     const ro = new ResizeObserver(() => fitAddon.fit())
     ro.observe(containerRef.current)
 
     return () => {
       unsub()
       ro.disconnect()
-      containerRef.current?.removeEventListener('contextmenu', handleContextMenu)
+      container.removeEventListener('contextmenu', handleContextMenu)
+      container.removeEventListener('dragover', handleDragOver)
+      container.removeEventListener('dragleave', handleDragLeave)
+      container.removeEventListener('drop', handleDrop)
       term.dispose()
     }
   }, [connId])
