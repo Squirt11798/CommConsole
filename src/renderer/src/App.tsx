@@ -134,6 +134,15 @@ export default function App() {
     }
   }, [lockCfg.enabled, lockCfg.idleMinutes, locked])
 
+  // Broadcast and tiled view only make sense with 2+ connections — turn them
+  // off automatically when closing a session drops the count below that.
+  useEffect(() => {
+    if (tabs.length < 2) {
+      setBroadcast(false)
+      setTiled(false)
+    }
+  }, [tabs.length])
+
   // Apply the active theme to the document root whenever it changes
   useEffect(() => {
     document.documentElement.dataset.theme = settings.theme
@@ -148,6 +157,9 @@ export default function App() {
   useEffect(() => {
     loadSessions()
     const unsubClosed = window.api.ssh.onClosed((connId) => {
+      // Clear a keyboard-interactive prompt tied to a closed/failed connection
+      // so its overlay can't linger and block input.
+      setSshPrompt(prev => (prev && prev.connId === connId ? null : prev))
       setTabs(prev => {
         const next = prev.filter(t => t.id !== connId)
         setActiveTab(prev2 => prev2 === connId ? (next[next.length - 1]?.id ?? null) : prev2)

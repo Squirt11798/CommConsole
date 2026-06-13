@@ -260,6 +260,9 @@ export function registerSshHandlers(win: BrowserWindow): void {
 
       client.on('error', (err) => {
         connections.delete(connId)
+        // Dismiss any keyboard-interactive prompt left open for this attempt so
+        // its overlay doesn't stay on top and swallow input after a failed login.
+        send(win, 'ssh:closed', connId)
         if (err.message?.includes('All configured authentication methods failed')) {
           if (privateKey) {
             reject(new Error(
