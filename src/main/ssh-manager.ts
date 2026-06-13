@@ -306,7 +306,11 @@ export function registerSshHandlers(win: BrowserWindow): void {
         host,
         port,
         username,
-        tryKeyboard: true,
+        // Only fall back to keyboard-interactive when we have nothing else to
+        // try. With a password (or key) present, an incorrect one then fails
+        // immediately and cleanly instead of triggering a second interactive
+        // round that holds the connection open and freezes the retry UI.
+        tryKeyboard: !privateKey && !password,
         readyTimeout: 20000,
         keepaliveInterval: 10000,
         hostVerifier: makeHostVerifier(win, host, port)
